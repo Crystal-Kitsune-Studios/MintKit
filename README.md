@@ -29,7 +29,7 @@ python3 mintos.py
 
 ```bash
 # Clone the repo
-git clone https://github.com/crystal-kitsune-studios/mintkit
+git clone https://github.com/Crystal-Kitsune-Studios/pocketmint
 cd mintkit
 
 # Build image
