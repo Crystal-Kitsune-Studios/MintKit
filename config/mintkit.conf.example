@@ -5,7 +5,7 @@
 BOARD=pi-zero-2w
 
 # Image size in MB (512 is safe for minimal rootfs + games)
-IMAGE_SIZE_MB=512
+IMAGE_SIZE_MB=2048
 
 # Cross-compilation toolchain prefix
 CROSS_COMPILE=aarch64-linux-gnu-
