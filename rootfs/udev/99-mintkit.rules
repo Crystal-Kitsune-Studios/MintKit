@@ -1,0 +1,17 @@
+# 99-mintkit.rules
+# Cartridge (USB mass storage via USB-A)
+SUBSYSTEM=="block", ATTRS{idVendor}=="*", ENV{ID_BUS}=="usb", \
+  ENV{ID_USB_DRIVER}=="usb-storage", \
+  SYMLINK+="mintcart", TAG+="systemd"
+
+# GPIO gamepad (evdev)
+SUBSYSTEM=="input", ATTRS{name}=="*gamepad*", \
+  MODE="0664", GROUP="input"
+
+# Generic HID joystick
+SUBSYSTEM=="input", KERNEL=="js[0-9]*", \
+  MODE="0664", GROUP="input"
+
+# ADC keys (PocketMint shoulder buttons)
+SUBSYSTEM=="input", ATTRS{name}=="*adc*", \
+  MODE="0664", GROUP="input"
