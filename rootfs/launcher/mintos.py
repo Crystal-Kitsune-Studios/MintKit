@@ -46,13 +46,13 @@ RED      = (220,  60,  60)
 GOLD     = (240, 200,  60)
 
 BUILTIN_CATALOG = [
-    {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint.",   "icon": "\u{1F310}"},
+    {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint.",   "icon": "🌐"},
     {"id": "crypt-raid",      "name": "Crypt Raid",        "developer": "CKS",        "category": "game", "price": 0,    "desc": "Roguelike dungeon crawler.",                "icon": "\u2694"},
-    {"id": "pixelcraft",      "name": "PixelCraft",        "developer": "NeonByte",   "category": "game", "price": 2.99, "desc": "Pixel art building sandbox.",              "icon": "\u{1F3D7}"},
-    {"id": "chiptune",        "name": "ChipTune Player",   "developer": "RetroAudio", "category": "media","price": 0,    "desc": "Play .xm/.mod tracker files.",             "icon": "\u{1F3B5}"},
-    {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator.",                "icon": "\u{1F3AE}"},
-    {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app.",                  "icon": "\u{1F5BC}"},
-    {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app.",                "icon": "\u{1F4DD}"},
+    {"id": "pixelcraft",      "name": "PixelCraft",        "developer": "NeonByte",   "category": "game", "price": 2.99, "desc": "Pixel art building sandbox.",              "icon": "🏗️"},
+    {"id": "chiptune",        "name": "ChipTune Player",   "developer": "RetroAudio", "category": "media","price": 0,    "desc": "Play .xm/.mod tracker files.",             "icon": "🎵"},
+    {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator.",                "icon": "🎮"},
+    {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app.",                  "icon": "🖼️"},
+    {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app.",                "icon": "📝"},
 ]
 
 def load_catalog():
