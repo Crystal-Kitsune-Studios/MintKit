@@ -1,0 +1,96 @@
+# .github/workflows/build.yml
+name: Build MintKit OS Image
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]         # v1.0.0 → triggers a Release
+  workflow_dispatch:        # manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/linux-*
+            .build/u-boot-*
+            .build/rk3566-bl31.elf
+          key: mintkit-build-$ hashFiles('config/kernel.config') 
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            bison flex libssl-dev libgmp-dev libmpc-dev \
+            device-tree-compiler u-boot-tools \
+            debootstrap qemu-user-static binfmt-support \
+            parted dosfstools e2fsprogs kpartx \
+            wget xz-utils bzip2 rsync
+
+      - name: Build config
+        run: cp config/mintkit.conf.example config/mintkit.conf
+
+      - name: Build U-Boot
+        run: sudo -E bash scripts/build-uboot.sh
+        env:
+          SCRIPT_DIR: $ github.workspace 
+          CROSS_COMPILE: aarch64-linux-gnu-
+          ARCH: arm64
+
+      - name: Build kernel
+        run: sudo -E bash scripts/build-kernel.sh rk3566
+        env:
+          SCRIPT_DIR: $ github.workspace 
+          CROSS_COMPILE: aarch64-linux-gnu-
+          ARCH: arm64
+
+      - name: Build rootfs
+        run: sudo -E bash scripts/build-rootfs.sh
+        env:
+          SCRIPT_DIR: $ github.workspace 
+          CROSS_COMPILE: aarch64-linux-gnu-
+          ARCH: arm64
+
+      - name: Assemble image
+        run: sudo -E bash scripts/build-image.sh rk3566
+        env:
+          SCRIPT_DIR: $ github.workspace 
+
+      - name: Compress + checksum
+        run: |
+          cd dist
+          xz -T0 -9 mintkit-rk3566.img
+          sha256sum mintkit-rk3566.img.xz > mintkit-rk3566.img.xz.sha256
+
+      # Every push to main: upload as a downloadable artifact
+      - name: Upload artifact
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: mintkit-rk3566-$ github.sha 
+          path: dist/
+          retention-days: 14
+
+      # Every version tag (v1.0.0): create a public GitHub Release
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MintKit $ github.ref_name 
+          body: |
+            ## Installation
+            1. Download `mintkit-rk3566.img.xz`
+            2. Flash with [Balena Etcher](https://etcher.balena.io)
+            3. Insert SD card into PocketMint, power on
+            4. Default login: `mintkit` / `mintkit`
+          files: dist/
+          draft: false
+          prerelease: $ contains(github.ref_name, '-rc') 
