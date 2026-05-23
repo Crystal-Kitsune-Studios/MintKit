@@ -1,0 +1,10 @@
+{
+  "id": "crystal-browser",
+  "name": "Crystal Browser",
+  "developer": "Crystal Kitsune Studios",
+  "category": "app",
+  "price": 0,
+  "desc": "Lightweight web browser for PocketMint.",
+  "version": "1.0",
+  "entry": "main.py"
+}

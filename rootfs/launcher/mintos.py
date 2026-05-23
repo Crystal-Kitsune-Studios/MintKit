@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# rootfs/launcher/mintos.py  --  MintKit OS launcher (full)
+# rootfs/launcher/mintos.py  --  MintKit OS launcher v2 (apps + wifi)
 import os, sys, json, subprocess, platform, datetime, shutil
 from pathlib import Path
 
@@ -46,13 +46,13 @@ RED      = (220,  60,  60)
 GOLD     = (240, 200,  60)
 
 BUILTIN_CATALOG = [
-    {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint.",   "icon": "🌐"},
+    {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint.",   "icon": "\u{1F310}"},
     {"id": "crypt-raid",      "name": "Crypt Raid",        "developer": "CKS",        "category": "game", "price": 0,    "desc": "Roguelike dungeon crawler.",                "icon": "\u2694"},
-    {"id": "pixelcraft",      "name": "PixelCraft",        "developer": "NeonByte",   "category": "game", "price": 2.99, "desc": "Pixel art building sandbox.",              "icon": "🏗️"},
-    {"id": "chiptune",        "name": "ChipTune Player",   "developer": "RetroAudio", "category": "media","price": 0,    "desc": "Play .xm/.mod tracker files.",             "icon": "🎵"},
-    {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator.",                "icon": "🎮"},
-    {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app.",                  "icon": "🖼️"},
-    {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app.",                "icon": "📝"},
+    {"id": "pixelcraft",      "name": "PixelCraft",        "developer": "NeonByte",   "category": "game", "price": 2.99, "desc": "Pixel art building sandbox.",              "icon": "\u{1F3D7}"},
+    {"id": "chiptune",        "name": "ChipTune Player",   "developer": "RetroAudio", "category": "media","price": 0,    "desc": "Play .xm/.mod tracker files.",             "icon": "\u{1F3B5}"},
+    {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator.",                "icon": "\u{1F3AE}"},
+    {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app.",                  "icon": "\u{1F5BC}"},
+    {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app.",                "icon": "\u{1F4DD}"},
 ]
 
 def load_catalog():
@@ -82,11 +82,26 @@ def load_games():
 
 def is_installed(app_id): return (GAMES_DIR / app_id).exists()
 
+APP_SERVER = "https://pocketmint.crystal-kitsune-studios.com/apps"
+
 def install_app(app):
-    dest = GAMES_DIR / app["id"]; dest.mkdir(exist_ok=True)
-    meta = {k: v for k, v in app.items() if k != "icon"}; meta["entry"] = "main.py"
-    (dest / "game.json").write_text(json.dumps(meta, indent=2))
-    (dest / "main.py").write_text(f'print("Launching {app["name"]}...")')
+    import urllib.request, zipfile, io
+    dest = GAMES_DIR / app["id"]
+    dest.mkdir(exist_ok=True)
+    zip_url = f"{APP_SERVER}/{app['id']}.zip"
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(zip_url, headers={"User-Agent": "MintKit/1.0"}),
+            timeout=15
+        ) as r:
+            data = r.read()
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            zf.extractall(dest)
+    except Exception as e:
+        # Fallback: write stub so the entry exists
+        meta = {k: v for k, v in app.items() if k != "icon"}; meta["entry"] = "main.py"
+        (dest / "game.json").write_text(json.dumps(meta, indent=2))
+        (dest / "main.py").write_text(f'print("Install failed: {e}")')
 
 def uninstall_app(app_id):
     dest = GAMES_DIR / app_id
@@ -540,249 +555,6 @@ def main():
             if boot.update(): state = "menu"; active = menu
             boot.draw()
         else: active.draw()
-        pygame.display.flip()
-        clock.tick(FPS)
-
-if __name__ == "__main__": main()
-
-# --- Platform detection (must happen before pygame import) ---
-IS_LINUX = platform.system() == "Linux"
-if IS_LINUX:
-    os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
-    os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
-else:
-    os.environ.setdefault("SDL_VIDEODRIVER", "windows")
-    os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
-
-import pygame
-
-# --- Paths & metadata ---
-GAMES_DIR = Path("/home/mintkit/games") if IS_LINUX else Path(__file__).parent / "games"
-VERSION   = "MintKit 1.0-alpha"
-STORE_URL = "crystal-kitsune-studios.com"
-
-# --- Display ---
-SCREEN_W, SCREEN_H = 640, 480
-FPS = 60
-
-# --- Green retro color palette ---
-BG       = (10,  26,  16)
-CARD     = (13,  32,  16)
-CARD_SEL = (18,  45,  22)
-BORDER   = (29, 100,  55)
-ACCENT   = (61, 204, 112)
-DIM      = (90, 150, 105)
-WHITE    = (180, 240, 195)
-BLACK    = (5,   10,   8)
-
-# --- Helpers ---
-def load_games():
-    if not GAMES_DIR.exists():
-        return []
-    games = []
-    for p in sorted(GAMES_DIR.iterdir()):
-        m = p / "game.json"
-        if p.is_dir() and m.exists():
-            try:
-                info = json.loads(m.read_text())
-                info["path"] = p
-                games.append(info)
-            except Exception:
-                pass
-    return games
-
-def launch(game):
-    entry = game["path"] / game.get("entry", "main.py")
-    subprocess.Popen([sys.executable, str(entry)])
-
-def blit_c(surf, img, y):
-    surf.blit(img, (SCREEN_W // 2 - img.get_width() // 2, y))
-
-def draw_status_bar(surf, fonts):
-    # Battery blocks
-    for i in range(3):
-        pygame.draw.rect(surf, ACCENT, (8 + i * 13, 7, 9, 14))
-    pygame.draw.rect(surf, ACCENT, (8 + 3 * 13, 10, 3, 8))  # tip
-    # Title
-    title = fonts["title"].render("POCKETMINT", True, ACCENT)
-    blit_c(surf, title, 4)
-    # Clock
-    now  = datetime.datetime.now().strftime("%H:%M")
-    info = fonts["sm"].render(f"WiFi  {now}", True, ACCENT)
-    surf.blit(info, (SCREEN_W - info.get_width() - 8, 8))
-    pygame.draw.line(surf, BORDER, (0, 28), (SCREEN_W, 28), 1)
-
-def draw_section(surf, fonts, label):
-    lbl = fonts["sm"].render(label, True, ACCENT)
-    blit_c(surf, lbl, 32)
-    pygame.draw.line(surf, BORDER, (0, 50), (SCREEN_W, 50), 1)
-
-def draw_hints(surf, fonts, hints):
-    pygame.draw.line(surf, BORDER, (0, SCREEN_H - 34), (SCREEN_W, SCREEN_H - 34), 1)
-    x = 6
-    for key, action in hints:
-        key_img = fonts["xs"].render(key, True, BLACK)
-        kw = key_img.get_width() + 8
-        pygame.draw.rect(surf, ACCENT, (x, SCREEN_H - 26, kw, 18))
-        surf.blit(key_img, (x + 4, SCREEN_H - 24))
-        x += kw + 4
-        act_img = fonts["xs"].render(action, True, DIM)
-        surf.blit(act_img, (x, SCREEN_H - 24))
-        x += act_img.get_width() + 20
-
-def draw_list(surf, fonts, items, cur):
-    item_h = min(60, (SCREEN_H - 90) // max(len(items), 1))
-    for i, (label, sub) in enumerate(items):
-        y = 54 + i * item_h
-        bg = CARD_SEL if i == cur else CARD
-        pygame.draw.rect(surf, bg, (4, y, SCREEN_W - 8, item_h - 3))
-        if i == cur:
-            pygame.draw.rect(surf, ACCENT, (4, y, SCREEN_W - 8, item_h - 3), 1)
-            arrow = fonts["menu"].render("\u25b6", True, ACCENT)
-            surf.blit(arrow, (10, y + (item_h - 3) // 2 - arrow.get_height() // 2))
-        lbl_img = fonts["menu"].render(label, True, ACCENT)
-        surf.blit(lbl_img, (32, y + 6))
-        if sub:
-            sub_img = fonts["sm"].render(sub, True, DIM)
-            surf.blit(sub_img, (32, y + 28))
-
-# --- Screens ---
-class Boot:
-    def __init__(self, screen, fonts):
-        self.screen = screen; self.fonts = fonts; self.t = 0
-    def update(self):
-        self.t += 1
-        return self.t > FPS * 2  # 2 second splash
-    def draw(self):
-        s = self.screen; s.fill(BG)
-        title = self.fonts["big"].render("POCKETMINT", True, ACCENT)
-        ver   = self.fonts["sm"].render(VERSION, True, DIM)
-        dots  = self.fonts["sm"].render("." * ((self.t // 10) % 4), True, DIM)
-        blit_c(s, title, SCREEN_H // 2 - 40)
-        blit_c(s, ver,   SCREEN_H // 2 + 10)
-        blit_c(s, dots,  SCREEN_H // 2 + 34)
-
-class MainMenu:
-    def __init__(self, screen, fonts, games):
-        self.screen = screen; self.fonts = fonts; self.games = games; self.cur = 0
-    def items(self):
-        n = len(self.games)
-        return [
-            ("LIBRARY",    f"{n} title{'s' if n != 1 else ''} installed"),
-            ("POCKETMALL", STORE_URL),
-            ("FRIENDS",    None),
-            ("MEDIA",      None),
-            ("SETTINGS",   VERSION),
-        ]
-    def handle(self, ev):
-        items = self.items()
-        if ev.type == pygame.KEYDOWN:
-            if ev.key in (pygame.K_DOWN, pygame.K_s):   self.cur = (self.cur + 1) % len(items)
-            elif ev.key in (pygame.K_UP, pygame.K_w):   self.cur = (self.cur - 1) % len(items)
-            elif ev.key in (pygame.K_RETURN, pygame.K_z, pygame.K_SPACE):
-                return "select", items[self.cur][0]
-        return None, None
-    def draw(self):
-        s = self.screen; s.fill(BG)
-        draw_status_bar(s, self.fonts)
-        draw_section(s, self.fonts, "HOME")
-        draw_list(s, self.fonts, self.items(), self.cur)
-        draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("X/Esc", "BACK")])
-
-class Library:
-    def __init__(self, screen, fonts, games):
-        self.screen = screen; self.fonts = fonts; self.games = games; self.cur = 0
-    def handle(self, ev):
-        if ev.type == pygame.KEYDOWN:
-            if ev.key in (pygame.K_DOWN, pygame.K_s):   self.cur = (self.cur + 1) % max(1, len(self.games))
-            elif ev.key in (pygame.K_UP, pygame.K_w):   self.cur = (self.cur - 1) % max(1, len(self.games))
-            elif ev.key in (pygame.K_RETURN, pygame.K_z, pygame.K_SPACE):
-                if self.games: return "launch", self.games[self.cur]
-            elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
-        return None, None
-    def draw(self):
-        s = self.screen; s.fill(BG)
-        draw_status_bar(s, self.fonts)
-        draw_section(s, self.fonts, "LIBRARY")
-        if not self.games:
-            msg = self.fonts["menu"].render("No games installed", True, DIM)
-            blit_c(s, msg, SCREEN_H // 2 - 12)
-        else:
-            items = [(g.get("name", g["path"].name), g.get("developer", "")) for g in self.games]
-            draw_list(s, self.fonts, items, self.cur)
-        draw_hints(s, self.fonts, [("Z/Enter", "LAUNCH"), ("X/Esc", "BACK")])
-
-class Settings:
-    OPTS = [("WiFi", None), ("Brightness", None), ("Volume", None),
-            ("About", VERSION), ("Shutdown", None), ("Back", None)]
-    def __init__(self, screen, fonts):
-        self.screen = screen; self.fonts = fonts; self.cur = 0
-    def handle(self, ev):
-        if ev.type == pygame.KEYDOWN:
-            if ev.key in (pygame.K_DOWN, pygame.K_s):   self.cur = (self.cur + 1) % len(self.OPTS)
-            elif ev.key in (pygame.K_UP, pygame.K_w):   self.cur = (self.cur - 1) % len(self.OPTS)
-            elif ev.key in (pygame.K_RETURN, pygame.K_z, pygame.K_SPACE):
-                label = self.OPTS[self.cur][0]
-                if label == "Shutdown":
-                    if IS_LINUX: subprocess.run(["poweroff"])
-                if label == "Back": return "back", None
-            elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
-        return None, None
-    def draw(self):
-        s = self.screen; s.fill(BG)
-        draw_status_bar(s, self.fonts)
-        draw_section(s, self.fonts, "SETTINGS")
-        draw_list(s, self.fonts, self.OPTS, self.cur)
-        draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("X/Esc", "BACK")])
-
-# --- Main ---
-def main():
-    pygame.init(); pygame.joystick.init()
-    if pygame.joystick.get_count(): pygame.joystick.Joystick(0).init()
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
-    pygame.display.set_caption("MintKit")
-    clock  = pygame.time.Clock()
-    fonts  = {
-        "big":   pygame.font.SysFont("Courier New", 36, bold=True),
-        "title": pygame.font.SysFont("Courier New", 20, bold=True),
-        "menu":  pygame.font.SysFont("Courier New", 19, bold=True),
-        "sm":    pygame.font.SysFont("Courier New", 13),
-        "xs":    pygame.font.SysFont("Courier New", 12),
-    }
-    games  = load_games()
-    boot   = Boot(screen, fonts)
-    menu   = MainMenu(screen, fonts, games)
-    lib    = Library(screen, fonts, games)
-    setts  = Settings(screen, fonts)
-    state  = "boot"
-    active = boot
-
-    while True:
-        for ev in pygame.event.get():
-            if ev.type == pygame.QUIT:
-                pygame.quit(); sys.exit()
-            if state == "menu":
-                act, data = menu.handle(ev)
-                if act == "select":
-                    if data == "LIBRARY":
-                        lib.games = load_games(); lib.cur = 0
-                        state = "library"; active = lib
-                    elif data == "SETTINGS":
-                        state = "settings"; active = setts
-            elif state == "library":
-                act, data = lib.handle(ev)
-                if act == "back":    state = "menu"; active = menu
-                elif act == "launch": launch(data)
-            elif state == "settings":
-                act, data = setts.handle(ev)
-                if act == "back":    state = "menu"; active = menu
-
-        if state == "boot":
-            if boot.update(): state = "menu"; active = menu
-            boot.draw()
-        else:
-            active.draw()
-
         pygame.display.flip()
         clock.tick(FPS)
 
