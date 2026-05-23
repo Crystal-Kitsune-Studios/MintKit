@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PocketMint - Crystal Kitsune Studios</title>
+<style>
+  :root {
+    --green: #3dcc70;
+    --green-dim: #1d6437;
+    --green-hi: #8cffa0;
+    --bg: #0a1a10;
+    --bg2: #050d08;
+    --text: #b4f0c3;
+    --text-dim: #5a9669;
+    --sep: #12321a;
+    --bar: #060d08;
+    --gold: #f0c83c;
+    --red: #dc3c3c;
+    --blue: #3c8cdc;
+    --sel: #0d341c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; min-height: 100vh; overflow-x: hidden; }
+  body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px); pointer-events: none; z-index: 9999; }
+  nav { position: sticky; top: 0; z-index: 100; background: var(--bar); border-bottom: 1px solid var(--sep); display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 48px; }
+  .nav-logo { font-size: 1rem; font-weight: bold; color: var(--green); letter-spacing: 3px; text-transform: uppercase; }
+  .nav-logo span { color: var(--text-dim); }
+  .nav-links { display: flex; gap: 2rem; list-style: none; }
+  .nav-links a { color: var(--text-dim); text-decoration: none; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--green-hi); }
+  .nav-badge { font-size: 0.65rem; color: var(--green); border: 1px solid var(--green-dim); padding: 2px 8px; letter-spacing: 2px; }
+  .hero { min-height: 92vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 60% 40% at 50% 60%, rgba(61,204,112,0.07) 0%, transparent 70%); pointer-events: none; }
+  .hero h1 { font-size: clamp(2.5rem, 8vw, 5rem); letter-spacing: 0.2em; color: var(--green); text-shadow: 0 0 40px rgba(61,204,112,0.4), 0 2px 0 #000; margin-bottom: 0.5rem; }
+  .hero .tagline { font-size: clamp(0.75rem, 2vw, 1rem); color: var(--text-dim); letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 2.5rem; }
+  .hero .desc { max-width: 560px; font-size: 0.95rem; line-height: 1.8; color: var(--text); margin-bottom: 3rem; }
+  .btn-row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+  .btn { display: inline-block; padding: 0.7rem 2rem; border: 2px solid var(--green); color: var(--green); text-decoration: none; font-family: inherit; font-size: 0.8rem; letter-spacing: 0.2em; text-transform: uppercase; transition: background 0.2s, color 0.2s; cursor: pointer; background: transparent; }
+  .btn:hover { background: var(--green); color: var(--bg2); }
+  .btn.secondary { border-color: var(--green-dim); color: var(--text-dim); }
+  .btn.secondary:hover { background: var(--sel); color: var(--text); }
+  .hero-scroll { margin-top: 4rem; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.3em; animation: blink 1.4s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .device-section { display: flex; flex-direction: column; align-items: center; padding: 5rem 2rem; border-top: 1px solid var(--sep); background: var(--bg2); }
+  .console-svg { width: 100%; max-width: 520px; }
+  .section-title { font-size: 0.7rem; letter-spacing: 0.4em; text-transform: uppercase; color: var(--green); margin-bottom: 0.5rem; }
+  .section-header { font-size: clamp(1.5rem, 4vw, 2.5rem); color: white; margin-bottom: 3rem; letter-spacing: 0.05em; }
+  .specs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1px; background: var(--sep); border: 1px solid var(--sep); }
+  .spec-card { background: var(--bg); padding: 1.5rem; transition: background 0.2s; }
+  .spec-card:hover { background: var(--sel); }
+  .spec-label { font-size: 0.65rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
+  .spec-val { font-size: 1rem; color: white; line-height: 1.4; }
+  .spec-val .highlight { color: var(--green); }
+  .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; }
+  .feature-card { border: 1px solid var(--sep); padding: 1.5rem; background: var(--bg); transition: border-color 0.2s, box-shadow 0.2s; }
+  .feature-card:hover { border-color: var(--green-dim); box-shadow: 0 0 20px rgba(61,204,112,0.08); }
+  .feature-icon { font-size: 1.5rem; margin-bottom: 1rem; }
+  .feature-title { font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--green); margin-bottom: 0.5rem; }
+  .feature-desc { font-size: 0.8rem; color: var(--text-dim); line-height: 1.7; }
+  .mall-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1px; background: var(--sep); border: 1px solid var(--sep); margin-top: 2rem; }
+  .mall-app { background: var(--bg); padding: 1.2rem 1rem; display: flex; align-items: center; gap: 0.75rem; transition: background 0.2s; }
+  .mall-app:hover { background: var(--sel); }
+  .app-badge { font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase; padding: 2px 6px; }
+  .badge-game { background: var(--green-dim); color: white; }
+  .badge-app { background: var(--blue); color: white; }
+  .badge-media { background: var(--gold); color: #000; }
+  .badge-emu { background: var(--red); color: white; }
+  .app-info .app-name { font-size: 0.8rem; color: white; }
+  .app-info .app-dev { font-size: 0.65rem; color: var(--text-dim); }
+  .app-price { margin-left: auto; font-size: 0.7rem; color: var(--green-hi); }
+  .app-price.paid { color: var(--gold); }
+  .terminal-block { background: var(--bg2); border: 1px solid var(--green-dim); padding: 1.5rem; margin-top: 2rem; font-size: 0.8rem; line-height: 2; color: var(--text); }
+  .terminal-block .prompt { color: var(--green); }
+  .terminal-block .comment { color: var(--text-dim); }
+  footer { border-top: 1px solid var(--sep); padding: 2rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.2em; background: var(--bar); }
+  footer a { color: var(--green-dim); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+  canvas#fox { image-rendering: pixelated; display: block; margin: 0 auto 2rem; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="nav-logo">POCKET<span>MINT</span></div>
+  <ul class="nav-links">
+    <li><a href="#specs">Specs</a></li>
+    <li><a href="#features">Features</a></li>
+<li><a href="/pocketmall">PocketMall</a></li>
+    <li><a href="#os">MintKit</a></li>
+  </ul>
+  <div class="nav-badge">CKS v1.0</div>
+</nav>
+<section class="hero">
+  <canvas id="fox" width="80" height="80"></canvas>
+  <h1>POCKETMINT</h1>
+  <p class="tagline">Crystal Kitsune Studios - Handheld Console</p>
+  <p class="desc">A compact retro-inspired handheld running <strong style="color:var(--green)">MintKit</strong> - a custom Linux OS built from the ground up for gaming on the go. Powered by Raspberry Pi Zero 2 W.</p>
+  <div class="btn-row">
+    <a href="#specs" class="btn">View Specs</a>
+    <a href="#store" class="btn secondary">Browse PocketMall</a>
+  </div>
+  <div class="hero-scroll">&darr; scroll &darr;</div>
+</section>
+<section class="device-section">
+  <svg class="console-svg" viewBox="0 0 680 450" xmlns="http://www.w3.org/2000/svg">
+    <path d="M 96,28 L 584,28 Q 658,28 658,96 L 658,314 C 658,328 650,350 626,360 C 608,368 584,354 554,328 L 496,316 L 184,316 L 126,328 C 96,354 72,368 54,360 C 30,350 22,328 22,314 L 22,96 Q 22,28 96,28 Z" fill="#0a1a10" stroke="#3dcc70" stroke-width="2.5"/>
+    <path d="M 22,78 L 22,48 Q 22,28 46,28 L 96,28 L 96,42 C 80,46 60,54 40,70 Z" fill="#0d2010" stroke="#3dcc70" stroke-width="1.5"/>
+    <text x="56" y="56" fill="#3dcc70" font-family="monospace" font-size="11" text-anchor="middle" font-weight="bold">L</text>
+    <path d="M 658,78 L 658,48 Q 658,28 634,28 L 584,28 L 584,42 C 600,46 620,54 640,70 Z" fill="#0d2010" stroke="#3dcc70" stroke-width="1.5"/>
+    <text x="624" y="56" fill="#3dcc70" font-family="monospace" font-size="11" text-anchor="middle" font-weight="bold">R</text>
+    <rect x="184" y="22" width="22" height="14" rx="3" fill="#1d6437" stroke="#3dcc70" stroke-width="1"/>
+    <text x="195" y="16" fill="#5a9669" font-family="monospace" font-size="6" text-anchor="middle">PWR</text>
+    <rect x="220" y="25" width="38" height="8" rx="4" fill="#050d08" stroke="#1d6437" stroke-width="1"/>
+    <rect x="232" y="23" width="13" height="12" rx="3" fill="#3dcc70"/>
+    <text x="239" y="16" fill="#5a9669" font-family="monospace" font-size="6" text-anchor="middle">VOL</text>
+    <circle cx="284" cy="28" r="6" fill="#1d6437" stroke="#5a9669" stroke-width="1"/>
+    <text x="284" y="16" fill="#5a9669" font-family="monospace" font-size="6" text-anchor="middle">RST</text>
+    <rect x="390" y="20" width="32" height="17" rx="3" fill="#050d08" stroke="#1d6437" stroke-width="1.5"/>
+    <rect x="396" y="24" width="20" height="9" rx="1.5" fill="#0d2010"/>
+    <text x="406" y="14" fill="#5a9669" font-family="monospace" font-size="6" text-anchor="middle">USB-C</text>
+    <circle cx="54" cy="110" r="6" fill="#dc3c3c" opacity="0.92"/>
+    <text x="67" y="114" fill="#5a9669" font-family="monospace" font-size="7">BATT</text>
+    <circle cx="626" cy="110" r="6" fill="#dc3c3c" opacity="0.45"/>
+    <text x="613" y="114" fill="#5a9669" font-family="monospace" font-size="7" text-anchor="end">POWER</text>
+    <circle cx="128" cy="196" r="54" fill="#060d08" stroke="#1d6437" stroke-width="1.8"/>
+    <rect x="115" y="172" width="26" height="48" rx="4" fill="#1d6437"/>
+    <rect x="104" y="183" width="48" height="26" rx="4" fill="#1d6437"/>
+    <circle cx="128" cy="196" r="9" fill="#0a1a10" stroke="#3dcc70" stroke-width="1.5"/>
+
+    <g transform="translate(0, -12)">
+    <rect x="204" y="52" width="272" height="256" rx="6" fill="#050d08" stroke="#1d6437" stroke-width="2"/>
+    <rect x="208" y="56" width="264" height="248" rx="4" fill="#0d2010"/>
+    <rect x="208" y="56" width="264" height="18" fill="#060d08" opacity="0.97"/>
+    <text x="340" y="68" fill="#3dcc70" font-family="monospace" font-size="7.5" text-anchor="middle">POCKETMINT   12:00</text>
+    <text x="340" y="110" fill="#3dcc70" font-family="monospace" font-size="13" text-anchor="middle" font-weight="bold">POCKETMINT</text>
+    <rect x="224" y="118" width="232" height="1.5" fill="#1d6437"/>
+    <rect x="262" y="126" width="156" height="16" rx="2" fill="#0d341c" stroke="#3dcc70" stroke-width="1"/>
+    <text x="340" y="138" fill="#8cffa0" font-family="monospace" font-size="9.5" text-anchor="middle">LIBRARY</text>
+    <rect x="262" y="146" width="156" height="16" rx="2" fill="#050d08"/>
+    <text x="340" y="158" fill="#5a9669" font-family="monospace" font-size="9.5" text-anchor="middle">POCKETMALL</text>
+    <rect x="262" y="166" width="156" height="16" rx="2" fill="#050d08"/>
+    <text x="340" y="178" fill="#5a9669" font-family="monospace" font-size="9.5" text-anchor="middle">FRIENDS</text>
+    <rect x="262" y="186" width="156" height="16" rx="2" fill="#050d08"/>
+    <text x="340" y="198" fill="#5a9669" font-family="monospace" font-size="9.5" text-anchor="middle">SETTINGS</text>
+    <rect x="262" y="206" width="156" height="16" rx="2" fill="#050d08"/>
+    <text x="340" y="218" fill="#5a9669" font-family="monospace" font-size="9.5" text-anchor="middle">MEDIA</text>
+    </g>
+    <circle cx="572" cy="184" r="30" fill="#0d2010" stroke="#3dcc70" stroke-width="2"/>
+    <text x="572" y="190" fill="#3dcc70" font-family="monospace" font-size="14" text-anchor="middle" font-weight="bold">II</text>
+    <circle cx="524" cy="252" r="28" fill="#0d2010" stroke="#3dcc70" stroke-width="2"/>
+    <text x="524" y="258" fill="#3dcc70" font-family="monospace" font-size="14" text-anchor="middle" font-weight="bold">I</text>
+    <text x="548" y="302" fill="#3dcc70" font-family="monospace" font-size="9" text-anchor="middle" letter-spacing="4">RUN  O</text>
+    <circle cx="52" cy="272" r="3" fill="#1d6437"/><circle cx="65" cy="272" r="3" fill="#1d6437"/><circle cx="78" cy="272" r="3" fill="#1d6437"/>
+    <circle cx="52" cy="285" r="3" fill="#1d6437"/><circle cx="65" cy="285" r="3" fill="#1d6437"/><circle cx="78" cy="285" r="3" fill="#1d6437"/>
+    <circle cx="52" cy="298" r="3" fill="#1d6437"/><circle cx="65" cy="298" r="3" fill="#1d6437"/><circle cx="78" cy="298" r="3" fill="#1d6437"/>
+    <circle cx="602" cy="272" r="3" fill="#1d6437"/><circle cx="615" cy="272" r="3" fill="#1d6437"/><circle cx="628" cy="272" r="3" fill="#1d6437"/>
+    <circle cx="602" cy="285" r="3" fill="#1d6437"/><circle cx="615" cy="285" r="3" fill="#1d6437"/><circle cx="628" cy="285" r="3" fill="#1d6437"/>
+    <circle cx="602" cy="298" r="3" fill="#1d6437"/><circle cx="615" cy="298" r="3" fill="#1d6437"/><circle cx="628" cy="298" r="3" fill="#1d6437"/>
+    <circle cx="216" cy="322" r="8" fill="#050d08" stroke="#3dcc70" stroke-width="1.5"/>
+    <text x="216" y="342" fill="#5a9669" font-family="monospace" font-size="7" text-anchor="middle">3.5mm</text>
+    <text x="659" y="208" fill="#5a9669" font-family="monospace" font-size="5" text-anchor="middle">CART</text>
+    <rect x="654" y="212" width="10" height="46" rx="2" fill="#050d08" stroke="#3dcc70" stroke-width="1.5"/>
+    <line x1="658" y1="218" x2="658" y2="252" stroke="#1d6437" stroke-width="1"/>
+  </svg>
+  <p style="margin-top:1.5rem;font-size:0.7rem;color:#5a9669;letter-spacing:0.2em">HARDWARE DESIGN - SUBJECT TO CHANGE</p>
+</section>
+<section id="specs" style="padding:5rem 2rem;border-top:1px solid var(--sep);max-width:960px;margin:0 auto">
+  <p class="section-title">Technical Specifications</p>
+  <h2 class="section-header">Built for Play</h2>
+  <div class="specs-grid">
+    <div class="spec-card"><div class="spec-label">CPU</div><div class="spec-val"><span class="highlight">BCM2710A1</span><br>Quad-core A53 @ 1GHz</div></div>
+    <div class="spec-card"><div class="spec-label">Display</div><div class="spec-val"><span class="highlight">256x240</span><br>Backlit IPS, 60fps</div></div>
+    <div class="spec-card"><div class="spec-label">OS</div><div class="spec-val"><span class="highlight">MintKit</span><br>Linux Mint fork, custom UI</div></div>
+    <div class="spec-card"><div class="spec-label">Storage</div><div class="spec-val"><span class="highlight">Physical Cartridge</span><br>+ internal flash</div></div>
+    <div class="spec-card"><div class="spec-label">Input</div><div class="spec-val">D-Pad, I, II, RUN, O<br>L + R shoulder buttons</div></div>
+    <div class="spec-card"><div class="spec-label">Audio</div><div class="spec-val">Stereo speakers<br>3.5mm headphone jack</div></div>
+    <div class="spec-card"><div class="spec-label">Connectivity</div><div class="spec-val">WiFi 802.11 b/g/n<br>USB-C charging</div></div>
+  </div>
+</section>
+<section id="features" style="padding:5rem 2rem;border-top:1px solid var(--sep);background:var(--bg2)">
+  <div style="max-width:960px;margin:0 auto">
+  <p class="section-title">Why PocketMint</p>
+  <h2 class="section-header">Features</h2>
+  <div class="features-grid">
+    <div class="feature-card"><div class="feature-icon">&#128250;</div><div class="feature-title">MintKit</div><div class="feature-desc">A custom Linux OS with a purpose-built pygame launcher. Fast boots, green aesthetic, full gamepad control. No desktop clutter.</div></div>
+    <div class="feature-card"><div class="feature-icon">&#128722;</div><div class="feature-title">PocketMall</div><div class="feature-desc">Built-in storefront for games, apps, emulators and media tools. Browse, install and update titles directly from the device.</div></div>
+    <div class="feature-card"><div class="feature-icon">&#128290;</div><div class="feature-title">Open Platform</div><div class="feature-desc">MintKit is open source. Build your own images, write your own games, submit to PocketMall. Full dev toolchain included.</div></div>
+    <div class="feature-card"><div class="feature-icon">&#128266;</div><div class="feature-title">Backlit + Stereo</div><div class="feature-desc">Crisp backlit IPS display and stereo speakers with a 3.5mm jack. Headphone audio auto-switches when you plug in.</div></div>
+    <div class="feature-card"><div class="feature-icon">&#128444;&#65039;</div><div class="feature-title">Physical Cartridges</div><div class="feature-desc">Pop in a cartridge and play. Games ship as physical media with digital backup. The way it should be.</div></div>
+  </div>
+  </div>
+</section>
+<section id="store" style="padding:5rem 2rem;border-top:1px solid var(--sep);max-width:960px;margin:0 auto">
+  <p class="section-title">PocketMall Store</p>
+  <h2 class="section-header">Available Now</h2>
+  <div class="mall-apps">
+    <div class="mall-app"><span class="app-badge badge-app">APP</span><div class="app-info"><div class="app-name">Crystal Browser</div><div class="app-dev">CKS</div></div><div class="app-price">FREE</div></div>
+    <div class="mall-app"><span class="app-badge badge-game">GAME</span><div class="app-info"><div class="app-name">Crypt Raid</div><div class="app-dev">CKS</div></div><div class="app-price">FREE</div></div>
+    <div class="mall-app"><span class="app-badge badge-game">GAME</span><div class="app-info"><div class="app-name">PixelCraft</div><div class="app-dev">NeonByte</div></div><div class="app-price paid">$2.99</div></div>
+    <div class="mall-app"><span class="app-badge badge-media">MEDIA</span><div class="app-info"><div class="app-name">ChipTune Player</div><div class="app-dev">RetroAudio</div></div><div class="app-price">FREE</div></div>
+    <div class="mall-app"><span class="app-badge badge-emu">EMU</span><div class="app-info"><div class="app-name">RetroCore</div><div class="app-dev">OpenEmu CKS</div></div><div class="app-price">FREE</div></div>
+    <div class="mall-app"><span class="app-badge badge-app">APP</span><div class="app-info"><div class="app-name">PocketDraw</div><div class="app-dev">SketchWare</div></div><div class="app-price paid">$1.99</div></div>
+    <div class="mall-app"><span class="app-badge badge-app">APP</span><div class="app-info"><div class="app-name">MintNotes</div><div class="app-dev">CKS</div></div><div class="app-price">FREE</div></div>
+  </div>
+</section>
+<section id="os" style="padding:5rem 2rem;border-top:1px solid var(--sep);background:var(--bg2)">
+  <div style="max-width:960px;margin:0 auto">
+  <p class="section-title">The Operating System</p>
+  <h2 class="section-header">MintKit</h2>
+  <p style="color:var(--text-dim);font-size:0.85rem;line-height:1.8;max-width:580px;margin-bottom:2rem">MintKit is a custom Linux OS built for the PocketMint hardware on Raspberry Pi Zero 2 W. Open source. Built with Python + pygame. Boots straight to the launcher. Ships with autostart, udev button mapping, brightness and volume controls.</p>
+  <div class="terminal-block">
+    <div><span class="comment"># Quick start on PC</span></div>
+    <div><span class="prompt">$ </span>pip install pygame</div>
+    <div><span class="prompt">$ </span>python3 mintos.py</div>
+    <div>&nbsp;</div>
+    <div><span class="comment"># Build a hardware image (Pi Zero 2 W)</span></div>
+    <div><span class="prompt">$ </span>sudo -E bash scripts/build-firmware.sh</div>
+    <div><span class="prompt">$ </span>sudo -E bash scripts/build-kernel.sh</div>
+    <div><span class="prompt">$ </span>sudo -E bash scripts/build-image.sh</div>
+    <div><span class="prompt">$ </span>sudo dd if=dist/mintkit-pizero2w.img of=/dev/sdX bs=4M status=progress</div>
+  </div>
+  <div style="margin-top:2rem;display:flex;gap:1rem;flex-wrap:wrap">
+    <a href="https://github.com/Crystal-Kitsune-Studios/MintKit" class="btn">GitHub</a>
+    <a href="/download" class="btn secondary">Download MintKit v0.1.0</a>
+  </div>
+  </div>
+</section>
+<footer>
+  <p style="margin-bottom:0.5rem;color:var(--green);letter-spacing:0.3em">POCKETMINT</p>
+  <p>&copy; 2026 <a href="https://crystal-kitsune-studios.com">Crystal Kitsune Studios</a> - <a href="https://pocketmint.crystal-kitsune-studios.com">pocketmint.crystal-kitsune-studios.com</a></p>
+  <p style="margin-top:0.5rem;font-size:0.6rem;opacity:0.5">MintKit is open source under MIT. Hardware specs subject to change.</p>
+</footer>
+<script>
+(function(){
+  const c = document.getElementById('fox');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const px = 10;
+  const rows = ["10000001","11000011","01111110","01144110","01102210","00111100","00233200","00233200"];
+  const C = {'0':null,'1':'#3dcc70','2':'#1d6437','3':'#f5fff8','4':'#050d08'};
+  const ox = (80-8*px)/2, oy = 0;
+  rows.forEach((row,ry)=>{[...row].forEach((col,rx)=>{const color=C[col];if(color){ctx.fillStyle=color;ctx.fillRect(ox+rx*px,oy+ry*px,px,px);}});});
+})();
+</script>
+</body>
+</html>

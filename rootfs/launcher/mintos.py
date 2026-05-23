@@ -46,13 +46,13 @@ RED      = (220,  60,  60)
 GOLD     = (240, 200,  60)
 
 BUILTIN_CATALOG = [
-    {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint.",   "icon": "\U0001F310"},
-    {"id": "crypt-raid",      "name": "Crypt Raid",        "developer": "CKS",        "category": "game", "price": 0,    "desc": "Roguelike dungeon crawler.",                "icon": "\u2694"},
-    {"id": "pixelcraft",      "name": "PixelCraft",        "developer": "NeonByte",   "category": "game", "price": 2.99, "desc": "Pixel art building sandbox.",              "icon": "\U0001F3D7"},
-    {"id": "chiptune",        "name": "ChipTune Player",   "developer": "RetroAudio", "category": "media","price": 0,    "desc": "Play .xm/.mod tracker files.",             "icon": "\U0001F3B5"},
-    {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator.",                "icon": "\U0001F3AE"},
-    {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app.",                  "icon": "\U0001F5BC"},
-    {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app.",                "icon": "\U0001F4DD"},
+    {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint."},
+    {"id": "crypt-raid",      "name": "Crypt Raid",        "developer": "CKS",        "category": "game", "price": 0,    "desc": "Roguelike dungeon crawler."},
+    {"id": "pixelcraft",      "name": "PixelCraft",        "developer": "NeonByte",   "category": "game", "price": 2.99, "desc": "Pixel art building sandbox."},
+    {"id": "chiptune",        "name": "ChipTune Player",   "developer": "RetroAudio", "category": "media","price": 0,    "desc": "Play .xm/.mod tracker files."},
+    {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator."},
+    {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app."},
+    {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app."},
 ]
 
 def load_catalog():
@@ -98,7 +98,6 @@ def install_app(app):
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             zf.extractall(dest)
     except Exception as e:
-        # Fallback: write stub so the entry exists
         meta = {k: v for k, v in app.items() if k != "icon"}; meta["entry"] = "main.py"
         (dest / "game.json").write_text(json.dumps(meta, indent=2))
         (dest / "main.py").write_text(f'print("Install failed: {e}")')
@@ -159,6 +158,7 @@ class Boot:
 class MainMenu:
     def __init__(self, screen, fonts, games):
         self.screen = screen; self.fonts = fonts; self.games = games; self.cur = 0
+        self.ota = None  # set from main() after OtaManager is created
     def items(self):
         n = len(self.games)
         return [
@@ -175,6 +175,9 @@ class MainMenu:
             elif ev.key in (pygame.K_UP, pygame.K_w):   self.cur = (self.cur - 1) % len(items)
             elif ev.key in (pygame.K_RETURN, pygame.K_z, pygame.K_SPACE):
                 return "select", items[self.cur][0]
+            elif ev.key == pygame.K_u:
+                if self.ota and self.ota.update_available and not self.ota.applying:
+                    self.ota.start_apply()
         return None, None
     def draw(self):
         s = self.screen; s.fill(BG)
@@ -189,6 +192,21 @@ class MainMenu:
                 s.blit(self.fonts["menu"].render("\u25b6", True, ACCENT), (10, y + (item_h - 3) // 2 - 10))
             s.blit(self.fonts["menu"].render(label, True, ACCENT), (32, y + 6))
             if sub: s.blit(self.fonts["sm"].render(sub, True, DIM), (32, y + 28))
+        # OTA notification bar
+        if self.ota and self.ota.update_available and not self.ota.applying:
+            v = self.ota.remote_info.get("version", "?")
+            pygame.draw.rect(s, (13, 45, 22), (0, SCREEN_H - 58, SCREEN_W, 20))
+            pygame.draw.line(s, ACCENT, (0, SCREEN_H - 58), (SCREEN_W, SCREEN_H - 58), 1)
+            msg = f"UPDATE AVAILABLE  v{v}  --  Press U to install"
+            blit_c(s, self.fonts["xs"].render(msg, True, ACCENT), SCREEN_H - 54)
+        if self.ota and self.ota.applying:
+            pygame.draw.rect(s, (13, 45, 22), (0, SCREEN_H - 58, SCREEN_W, 20))
+            pygame.draw.line(s, ACCENT, (0, SCREEN_H - 58), (SCREEN_W, SCREEN_H - 58), 1)
+            blit_c(s, self.fonts["xs"].render("Downloading update...", True, DIM), SCREEN_H - 54)
+        if self.ota and self.ota.apply_result:
+            success, version = self.ota.apply_result
+            self.ota.apply_result = None
+            if success: self.ota.restart_launcher()
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("X/Esc", "BACK")])
 
 class Library:
@@ -228,6 +246,8 @@ class PocketMall:
         self.catalog  = load_catalog()
         self.cat_idx  = 0; self.cur = 0; self.detail = None
         self.msg = ""; self.msg_t = 0
+        self.purchase_url = None; self.purchase_app = None
+        self.purchase_qr  = None; self.polling = False; self.poll_t = 0
     def filtered(self):
         cat = self.CATS[self.cat_idx]
         return self.catalog if cat == "ALL" else [a for a in self.catalog if a["category"].upper() == cat]
@@ -253,7 +273,11 @@ class PocketMall:
                 elif ev.key in (pygame.K_RIGHT, pygame.K_d): self.cat_idx = (self.cat_idx + 1) % len(self.CATS); self.cur = 0
                 elif ev.key in (pygame.K_RETURN, pygame.K_z, pygame.K_SPACE):
                     if items: self.detail = items[self.cur]
-                elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
+                elif ev.key in (pygame.K_ESCAPE, pygame.K_x):
+                    if self.purchase_url:
+                        self.purchase_url = self.purchase_app = self.purchase_qr = None
+                        self.polling = False
+                    else: return "back", None
         return None, None
     def draw(self):
         s = self.screen; s.fill(BG)
@@ -296,15 +320,14 @@ class PocketMall:
         draw_hints(s, self.fonts, [("\u2190/\u2192", "CATEGORY"), ("Z/Enter", "DETAILS"), ("X/Esc", "BACK")])
     def _draw_detail(self, s):
         app = self.detail; y = 60
-        s.blit(self.fonts["big"].render(app.get("icon", "?"), True, ACCENT), (16, y))
-        s.blit(self.fonts["menu"].render(app["name"], True, WHITE), (72, y + 4))
-        s.blit(self.fonts["sm"].render(app["developer"], True, DIM), (72, y + 28))
+        s.blit(self.fonts["menu"].render(app["name"], True, WHITE), (16, y + 4))
+        s.blit(self.fonts["sm"].render(app["developer"], True, DIM), (16, y + 28))
         ci = self.fonts["xs"].render(app["category"].upper(), True, BLACK)
         cw = ci.get_width() + 8
-        pygame.draw.rect(s, ACCENT, (72, y + 46, cw, 16))
-        s.blit(ci, (76, y + 48))
+        pygame.draw.rect(s, ACCENT, (16, y + 46, cw, 16))
+        s.blit(ci, (20, y + 48))
         price = "FREE" if app["price"] == 0 else f"${app['price']:.2f}"
-        s.blit(self.fonts["sm"].render(price, True, ACCENT if app["price"] == 0 else GOLD), (72 + cw + 8, y + 46))
+        s.blit(self.fonts["sm"].render(price, True, ACCENT if app["price"] == 0 else GOLD), (16 + cw + 8, y + 46))
         pygame.draw.line(s, BORDER, (0, y + 74), (SCREEN_W, y + 74), 1)
         words = app.get("desc", "").split(); line = ""; lines = []
         for w in words:
@@ -367,8 +390,7 @@ class Friends:
             y = 54 + i * item_h
             bg = CARD_SEL if i == self.cur else CARD
             pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 2))
-            if i == self.cur:
-                pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 2), 1)
+            if i == self.cur: pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 2), 1)
             if name is None:
                 t = self.fonts["menu"].render("[+ Add Friend]", True, DIM)
                 s.blit(t, (32, y + item_h // 2 - t.get_height() // 2))
@@ -377,8 +399,6 @@ class Friends:
                 pygame.draw.circle(s, ACCENT if online else DIM, (38, y + item_h // 2), 5)
                 s.blit(self.fonts["menu"].render(name, True, WHITE), (52, y + 6))
                 s.blit(self.fonts["xs"].render("Online" if online else "Offline", True, ACCENT if online else DIM), (52, y + 26))
-                di = self.fonts["xs"].render("Del = remove", True, BORDER)
-                s.blit(di, (SCREEN_W - di.get_width() - 8, y + 6))
         if self.mode == "add":
             ov = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
             ov.fill((0, 0, 0, 160)); s.blit(ov, (0, 0))
@@ -387,7 +407,6 @@ class Friends:
             blit_c(s, self.fonts["menu"].render("Add Friend", True, ACCENT), 172)
             s.blit(self.fonts["sm"].render("Enter username:", True, DIM), (96, 200))
             s.blit(self.fonts["menu"].render(self.input + "_", True, WHITE), (96, 218))
-            blit_c(s, self.fonts["xs"].render("Enter = confirm   Esc = cancel", True, DIM), 258)
         if self.msg_t > 0:
             mi = self.fonts["sm"].render(self.msg, True, ACCENT); blit_c(s, mi, SCREEN_H - 56)
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("Del", "REMOVE"), ("X/Esc", "BACK")])
@@ -526,6 +545,8 @@ def main():
         "sm":    pygame.font.SysFont("Courier New", 13),
         "xs":    pygame.font.SysFont("Courier New", 12),
     }
+    from updater import OtaManager
+    ota     = OtaManager()
     games   = load_games()
     boot    = Boot(screen, fonts)
     menu    = MainMenu(screen, fonts, games)
@@ -534,6 +555,8 @@ def main():
     friends = Friends(screen, fonts)
     media   = Media(screen, fonts)
     setts   = Settings(screen, fonts)
+    menu.ota = ota
+    ota.start_check()  # non-blocking background check
     state   = "boot"; active = boot
 
     while True:
