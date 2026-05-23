@@ -30,20 +30,21 @@ BOOKMARKS = [
 def strip_html(raw):
     raw = re.sub(r'<style[^>]*>.*?</style>', '', raw, flags=re.DOTALL|re.IGNORECASE)
     raw = re.sub(r'<script[^>]*>.*?</script>', '', raw, flags=re.DOTALL|re.IGNORECASE)
+    raw = re.sub(r'<!(?:--.*?--|DOCTYPE[^>]*)>', '', raw, flags=re.DOTALL|re.IGNORECASE)
     raw = re.sub(r'<br\s*/?>', '\n', raw, flags=re.IGNORECASE)
-    raw = re.sub(r'<p[^>]*>', '\n\n', raw, flags=re.IGNORECASE)
-    raw = re.sub(r'<h[1-6][^>]*>', '\n\n', raw, flags=re.IGNORECASE)
+    # Block elements -> newlines (div critical for Wikipedia/most sites)
+    raw = re.sub(r'<(?:p|div|article|section|header|footer|nav|main|aside|td|th|tr)[^>]*>', '\n', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'</(?:p|div|article|section|header|footer|nav|main|aside|td|th|tr)>', '\n', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'<h[1-6][^>]*>', '\n## ', raw, flags=re.IGNORECASE)
     raw = re.sub(r'</h[1-6]>', '\n', raw, flags=re.IGNORECASE)
-    # Capture li content inline so bullet and text stay on the same line
-    raw = re.sub(r'<li[^>]*>(.*?)</li>',
-                 lambda m: '\n\u2022 ' + re.sub(r'<[^>]+>', '', m.group(1)).strip(),
-                 raw, flags=re.DOTALL|re.IGNORECASE)
+    # List items - simple replacement avoids nested-tag bugs
+    raw = re.sub(r'<li[^>]*>', '\n\u2022 ', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'</li>', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'<[^>]+>', '', raw)
     raw = html.unescape(raw)
-    # Collapse whitespace within each line without losing newlines
     raw = '\n'.join(' '.join(ln.split()) for ln in raw.split('\n'))
     return re.sub(r'\n{3,}', '\n\n', raw).strip()
-
+    
 def fetch(url):
     if not url.startswith("http"): url = "https://" + url
     try:
