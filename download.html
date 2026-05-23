@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Download MintKit v0.5.0 - Crystal Kitsune Studios</title>
+<style>
+  :root {
+    --green: #3dcc70;
+    --green-dim: #1d6437;
+    --green-hi: #8cffa0;
+    --bg: #0a1a10;
+    --bg2: #050d08;
+    --text: #b4f0c3;
+    --text-dim: #5a9669;
+    --sep: #12321a;
+    --bar: #060d08;
+    --gold: #f0c83c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Courier New', Courier, monospace; min-height: 100vh; overflow-x: hidden; }
+  body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px); pointer-events: none; z-index: 9999; }
+  nav { position: sticky; top: 0; z-index: 100; background: var(--bar); border-bottom: 1px solid var(--sep); display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; height: 48px; }
+  .nav-logo { font-size: 1rem; font-weight: bold; color: var(--green); letter-spacing: 3px; text-transform: uppercase; text-decoration: none; }
+  .nav-logo span { color: var(--text-dim); }
+  .nav-links { display: flex; gap: 2rem; list-style: none; }
+  .nav-links a { color: var(--text-dim); text-decoration: none; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; transition: color 0.2s; }
+  .nav-links a:hover { color: var(--green-hi); }
+  .nav-badge { font-size: 0.65rem; color: var(--green); border: 1px solid var(--green-dim); padding: 2px 8px; letter-spacing: 2px; }
+  .page { max-width: 860px; margin: 0 auto; padding: 5rem 2rem; }
+  .section-title { font-size: 0.7rem; letter-spacing: 0.4em; text-transform: uppercase; color: var(--green); margin-bottom: 0.5rem; }
+  h1 { font-size: clamp(1.8rem, 4vw, 3rem); color: white; margin-bottom: 0.75rem; letter-spacing: 0.05em; }
+  .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 3rem; letter-spacing: 0.1em; }
+  .dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 3rem; }
+  .dl-card { border: 1px solid var(--sep); padding: 1.75rem; background: var(--bg2); transition: border-color 0.2s, box-shadow 0.2s; }
+  .dl-card:hover { border-color: var(--green-dim); box-shadow: 0 0 20px rgba(61,204,112,0.06); }
+  .dl-card.primary { border-color: var(--green-dim); }
+  .dl-label { font-size: 0.6rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; }
+  .dl-title { font-size: 1rem; color: white; margin-bottom: 0.4rem; }
+  .dl-desc { font-size: 0.75rem; color: var(--text-dim); line-height: 1.7; margin-bottom: 1.25rem; }
+  .btn { display: inline-block; padding: 0.6rem 1.5rem; border: 2px solid var(--green); color: var(--green); text-decoration: none; font-family: inherit; font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; transition: background 0.2s, color 0.2s; cursor: pointer; background: transparent; }
+  .btn:hover { background: var(--green); color: var(--bg2); }
+  .btn.dim { border-color: var(--green-dim); color: var(--text-dim); }
+  .btn.dim:hover { background: var(--green-dim); color: var(--text); }
+  .checksum-block { background: var(--bg2); border: 1px solid var(--sep); padding: 1.25rem 1.5rem; margin-bottom: 3rem; }
+  .checksum-block h3 { font-size: 0.65rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--green); margin-bottom: 1rem; }
+  .checksum-row { display: flex; gap: 1rem; align-items: baseline; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .checksum-type { font-size: 0.65rem; color: var(--text-dim); width: 60px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.2em; }
+  .checksum-val { font-size: 0.7rem; color: var(--green); word-break: break-all; }
+  .instructions { border-top: 1px solid var(--sep); padding-top: 2.5rem; }
+  .instructions h2 { font-size: 1rem; color: white; letter-spacing: 0.1em; margin-bottom: 1.5rem; text-transform: uppercase; }
+  .step { display: flex; gap: 1.25rem; margin-bottom: 1.5rem; align-items: flex-start; }
+  .step-num { font-size: 0.7rem; color: var(--green); border: 1px solid var(--green-dim); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-body { font-size: 0.82rem; color: var(--text-dim); line-height: 1.7; }
+  .step-body code { background: var(--bg2); border: 1px solid var(--sep); padding: 0.1rem 0.4rem; color: var(--green); font-family: inherit; font-size: 0.78rem; }
+  pre { background: var(--bg2); border: 1px solid var(--green-dim); padding: 1rem 1.25rem; font-size: 0.75rem; color: var(--text); line-height: 1.9; overflow-x: auto; margin-top: 0.75rem; }
+  .prompt { color: var(--green); }
+  footer { border-top: 1px solid var(--sep); padding: 2rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.2em; background: var(--bar); margin-top: 4rem; }
+  footer a { color: var(--green-dim); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="nav-logo">POCKET<span>MINT</span></a>
+  <ul class="nav-links">
+    <li><a href="/#specs">Specs</a></li>
+    <li><a href="/#features">Features</a></li>
+    <li><a href="/#store">PocketMall</a></li>
+    <li><a href="/#os">MintKit</a></li>
+  </ul>
+  <div class="nav-badge">CKS v1.0</div>
+</nav>
+<div class="page">
+  <p class="section-title">MintKit OS</p>
+  <h1>Download</h1>
+  <p class="subtitle">v0.5.0 &mdash; Raspberry Pi Zero 2 W &mdash; 23 May 2026</p>
+
+  <div class="dl-grid">
+    <div class="dl-card primary">
+      <div class="dl-label">Recommended</div>
+      <div class="dl-title">Direct Download</div>
+      <div class="dl-desc">Pre-built image for Pi Zero 2 W. Download and flash directly. No torrent client needed.</div>
+      <a href="https://github.com/Crystal-Kitsune-Studios/MintKit/releases/download/v0.5.0/mintkit-pizero2w.img.xz" class="btn">&#8595; mintkit-pizero2w.img.xz</a>
+    </div>
+    <div class="dl-card">
+      <div class="dl-label">Torrent</div>
+      <div class="dl-title">.torrent File</div>
+      <div class="dl-desc">For torrent clients. Downloads via HTTP webseed from GitHub — works even with zero peers.</div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <a href="/mintkit-v0.5.0.torrent" class="btn dim">&#8595; .torrent</a>
+        <a href="" class="btn dim">&#8683; Magnet</a>
+      </div>
+    </div>
+    <div class="dl-card">
+      <div class="dl-label">Source</div>
+      <div class="dl-title">GitHub Repository</div>
+      <div class="dl-desc">Full source code, build scripts, and release notes. MIT licensed. Build your own image or contribute.</div>
+      <a href="https://github.com/Crystal-Kitsune-Studios/MintKit" class="btn dim">&#8599; GitHub</a>
+    </div>
+  </div>
+
+  <div class="checksum-block">
+    <h3>Checksums &mdash; mintkit-pizero2w-v0.5.0.img.xz</h3>
+    <div class="checksum-row"><span class="checksum-type">SHA256</span><span class="checksum-val">f55165afb0bca42e2820e4106cfcd81aa2c1ed763648fe8fcea0b2d550c4515e</span></div>
+    <div class="checksum-row"><span class="checksum-type">MD5</span><span class="checksum-val">d9fd99ffb60fb76fd50dea87527acd60</span></div>
+  </div>
+
+  <div class="instructions">
+    <h2>Flash Instructions</h2>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">Download the <code>.img.xz</code> file above. No need to extract — Raspberry Pi Imager and <code>dd</code> both handle compressed images.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong style="color:white">Option A — Raspberry Pi Imager (easiest):</strong> Open Imager, choose "Use custom image", select the <code>.img.xz</code>, pick your SD card, and write.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong style="color:white">Option B — dd (Linux/macOS):</strong>
+<pre><span class="prompt">$ </span>xz -d mintkit-pizero2w.img.xz
+<span class="prompt">$ </span>sudo dd if=mintkit-pizero2w.img of=/dev/sdX bs=4M status=progress
+<span class="prompt">$ </span>sync</pre>
+      Replace <code>/dev/sdX</code> with your SD card device (check with <code>lsblk</code>).</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">Insert SD card into Pi Zero 2 W and power on. MintKit boots straight to the launcher in ~15 seconds.</div>
+    </div>
+  </div>
+</div>
+<footer>
+  <p style="margin-bottom:0.5rem;color:var(--green);letter-spacing:0.3em">POCKETMINT</p>
+  <p>&copy; 2026 <a href="https://crystal-kitsune-studios.com">Crystal Kitsune Studios</a></p>
+  <p style="margin-top:0.5rem;font-size:0.6rem;opacity:0.5">MintKit is open source under MIT. v0.5.0</p>
+</footer>
+</body>
+</html>
