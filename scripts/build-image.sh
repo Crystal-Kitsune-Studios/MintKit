@@ -2,7 +2,7 @@
 # scripts/build-image.sh — assemble Pi Zero 2 W flashable .img
 set -euo pipefail
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-source "$SCRIPT_DIR/config/mintkit.conf"
+source "$SCRIPT_DIR/rootfs/config/mintkit.conf"
 OUT="$SCRIPT_DIR/dist"
 IMG="$OUT/mintkit-pizero2w.img"
 ROOTFS="$SCRIPT_DIR/.build/rootfs"

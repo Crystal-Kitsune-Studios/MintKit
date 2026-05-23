@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-source "$SCRIPT_DIR/config/mintkit.conf"
+source "$SCRIPT_DIR/rootfs/config/mintkit.conf"
 
 BUILD_DIR="$SCRIPT_DIR/.build"
 OUT="$SCRIPT_DIR/dist/boot"
