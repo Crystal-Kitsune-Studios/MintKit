@@ -1,69 +1,58 @@
 #!/usr/bin/env bash
 # scripts/build-uboot.sh
-# Cross-compile U-Boot for RK3566 and produce a flashable binary
+# Fetch Raspberry Pi Zero 2 W boot firmware (Pi doesn't use U-Boot)
 set -euo pipefail
 
-SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$SCRIPT_DIR/config/mintkit.conf"
 
-CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}"
-ARCH="${ARCH:-arm64}"
 BUILD_DIR="$SCRIPT_DIR/.build"
-OUT="$SCRIPT_DIR/dist"
+OUT="$SCRIPT_DIR/dist/boot"
+FIRMWARE_DIR="$BUILD_DIR/rpi-firmware"
+FIRMWARE_TAG="${RPI_FIRMWARE_TAG:-stable}"
+FIRMWARE_BASE="https://github.com/raspberrypi/firmware/raw/$FIRMWARE_TAG/boot"
 
-UBOOT_VER="${UBOOT_VERSION:-2023.10}"
-UBOOT_SRC="$BUILD_DIR/u-boot-${UBOOT_VER}"
-UBOOT_TAR="$BUILD_DIR/u-boot-${UBOOT_VER}.tar.bz2"
+mkdir -p "$BUILD_DIR" "$OUT" "$FIRMWARE_DIR/overlays"
 
-# RK3566 BL31 (ARM Trusted Firmware)
-BL31_URL="https://github.com/rockchip-linux/rkbin/raw/master/bin/rk35/rk3568_bl31_v1.44.elf"
-BL31="$BUILD_DIR/rk3566-bl31.elf"
+echo "==> Fetching Raspberry Pi Zero 2 W boot firmware ($FIRMWARE_TAG)"
 
-mkdir -p "$BUILD_DIR" "$OUT"
+FIRMWARE_FILES=(
+  "bootcode.bin"
+  "start.elf"
+  "start_cd.elf"
+  "fixup.dat"
+  "fixup_cd.dat"
+  "bcm2710-rpi-zero-2-w.dtb"
+  "bcm2710-rpi-zero-2.dtb"
+  "overlays/miniuart-bt.dtbo"
+  "overlays/disable-bt.dtbo"
+)
 
-# ── 1. Fetch U-Boot source ────────────────────────────────────────────────────
-if [ ! -d "$UBOOT_SRC" ]; then
-  echo "==> Downloading U-Boot ${UBOOT_VER}"
-  if [ ! -f "$UBOOT_TAR" ]; then
-    wget -q --show-progress \
-      "https://ftp.denx.de/pub/u-boot/u-boot-${UBOOT_VER}.tar.bz2" \
-      -O "$UBOOT_TAR"
+for f in "${FIRMWARE_FILES[@]}"; do
+  if [ ! -f "$FIRMWARE_DIR/$f" ]; then
+    echo "  Downloading: $f"
+    wget -q --show-progress "$FIRMWARE_BASE/$f" -O "$FIRMWARE_DIR/$f"
+  else
+    echo "  Cached: $f"
   fi
-  echo "==> Extracting"
-  tar -xf "$UBOOT_TAR" -C "$BUILD_DIR"
-fi
+done
 
-# ── 2. Fetch BL31 ─────────────────────────────────────────────────────────────
-if [ ! -f "$BL31" ]; then
-  echo "==> Downloading RK3566 BL31"
-  wget -q --show-progress "$BL31_URL" -O "$BL31"
-fi
+cp -r "$FIRMWARE_DIR/"* "$OUT/"
 
-# ── 3. Apply any local patches ────────────────────────────────────────────────
-PATCH_DIR="$SCRIPT_DIR/kernel/patches/uboot"
-if [ -d "$PATCH_DIR" ]; then
-  echo "==> Applying U-Boot patches"
-  for p in "$PATCH_DIR"/*.patch; do
-    patch -d "$UBOOT_SRC" -p1 < "$p" && echo "  applied: $p"
-  done
-fi
+cat > "$OUT/config.txt" <<'EOF'
+arm_64bit=1
+kernel=kernel8.img
+gpu_mem=64
+dtoverlay=miniuart-bt
+enable_uart=1
+disable_overscan=1
+framebuffer_width=256
+framebuffer_height=240
+EOF
 
-# ── 4. Build ──────────────────────────────────────────────────────────────────
-cd "$UBOOT_SRC"
+cat > "$OUT/cmdline.txt" <<'EOF'
+console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet
+EOF
 
-echo "==> Configuring U-Boot (evb-rk3568 defconfig — closest upstream for RK3566)"
-make ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" evb-rk3568_defconfig
-
-echo "==> Compiling U-Boot"
-make -j"$(nproc)" \
-  ARCH="$ARCH" \
-  CROSS_COMPILE="$CROSS_COMPILE" \
-  BL31="$BL31" \
-  all
-
-# ── 5. Package ────────────────────────────────────────────────────────────────
-echo "==> Copying output to dist/"
-cp u-boot-rockchip.bin "$OUT/u-boot-rk3566.bin"
-
-echo "==> U-Boot build complete: $OUT/u-boot-rk3566.bin"
-ls -lh "$OUT/u-boot-rk3566.bin"
+echo "==> Pi Zero 2 W firmware ready: $OUT"
+ls -lh "$OUT/"
