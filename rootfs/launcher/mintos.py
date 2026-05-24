@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# rootfs/launcher/mintos.py  --  MintKit OS launcher v2 (apps + wifi)
+# rootfs/launcher/mintos.py  --  MintKit OS launcher v3 (OS built-ins integrated)
 import os, sys, json, subprocess, platform, datetime, shutil
 from pathlib import Path
 
@@ -12,6 +12,23 @@ else:
     os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
 
 import pygame
+
+# ── OS built-in imports ────────────────────────────────────────────────────
+from launcher.splash  import show   as show_splash
+from launcher.sleep   import SleepTimer
+from launcher.battery import draw_bar as draw_battery
+from launcher         import desktop
+from launcher         import overlay
+from launcher         import parental
+from launcher         import themes        as th
+from launcher         import achievements
+from launcher         import scores
+from launcher         import friends_ui
+from launcher         import settings      as settings_ui
+from launcher         import mintshell
+from launcher         import screenshot    as sc
+from launcher         import savestates
+from launcher         import sideload
 
 # --- Paths ---
 if IS_LINUX:
@@ -32,19 +49,37 @@ CATALOG_FILE = DATA_DIR / "catalog.json"
 VERSION   = "MintKit 1.0-alpha"
 STORE_URL = "crystal-kitsune-studios.com"
 
+# ── Device ID (stable across reboots) ────────────────────────────────────
+import hashlib as _hl
+def _get_device_id() -> str:
+    mid = Path("/etc/machine-id")
+    if mid.exists(): return mid.read_text().strip()[:16]
+    import uuid; return _hl.md5(uuid.getnode().to_bytes(6, "big")).hexdigest()[:16]
+DEVICE_ID = _get_device_id()
+
 SCREEN_W, SCREEN_H = 640, 480
 FPS = 60
 
-BG       = (10,  26,  16)
-CARD     = (13,  32,  16)
-CARD_SEL = (18,  45,  22)
-BORDER   = (29, 100,  55)
-ACCENT   = (61, 204, 112)
-DIM      = (90, 150, 105)
-WHITE    = (180, 240, 195)
-BLACK    = (5,   10,   8)
-RED      = (220,  60,  60)
-GOLD     = (240, 200,  60)
+RED  = (220,  60,  60)   # fixed — not theme-able
+GOLD = (240, 200,  60)   # fixed — not theme-able
+
+# Theme-driven palette globals — updated by _refresh_palette()
+BG = CARD = CARD_SEL = BORDER = ACCENT = DIM = WHITE = BLACK = (0, 0, 0)  # overwritten below
+
+def _refresh_palette():
+    """Pull color globals from the active theme. Call at startup and after theme change."""
+    global BG, CARD, CARD_SEL, BORDER, ACCENT, DIM, WHITE, BLACK
+    p = th.get()
+    BG       = p["bg"]
+    CARD     = p["card"]
+    CARD_SEL = tuple(min(255, c + 10) for c in p["card"])
+    BORDER   = p["border"]
+    ACCENT   = p["accent"]
+    DIM      = p["dim"]
+    WHITE    = p["white"]
+    BLACK    = p["black"]
+
+_refresh_palette()  # initialise from active theme at import time
 
 BUILTIN_CATALOG = [
     {"id": "crystal-browser", "name": "Crystal Browser",  "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Lightweight web browser for PocketMint."},
@@ -108,9 +143,34 @@ def uninstall_app(app_id):
     dest = GAMES_DIR / app_id
     if dest.exists(): shutil.rmtree(dest)
 
-def launch(game):
+def launch(game, screen=None, clock=None):
+    """Launch a game. Checks parental controls if restricted. Logs playtime."""
+    if game.get("restricted") and parental.is_enabled():
+        if screen and clock:
+            if not parental.prompt_pin(screen, clock, "Enter PIN to launch"):
+                return  # blocked
+        else:
+            return  # no display context — block silently
+    if parental.time_limit_reached():
+        return  # daily limit hit
     entry = game["path"] / game.get("entry", "main.py")
     subprocess.Popen([sys.executable, str(entry)])
+    parental.log_playtime(0)  # placeholder; real tracking done per-game
+    # ── Achievement: first app launched ────────────────────────────────────
+    achievements.unlock("app_installed")
+    # ── Now Playing card — fire-and-forget push ──────────────────────────────
+    import threading as _thr, urllib.request as _ureq, json as _jmod
+    def _push_now_playing(game_id):
+        try:
+            body = _jmod.dumps({"device_id": DEVICE_ID, "game_id": game_id}).encode()
+            req  = _ureq.Request(
+                "https://pocketmint.crystal-kitsune-studios.com/api/now-playing",
+                data=body, headers={"Content-Type": "application/json"}, method="POST"
+            )
+            _ureq.urlopen(req, timeout=3)
+        except Exception:
+            pass  # offline — silently skip
+    _thr.Thread(target=_push_now_playing, args=(game["id"],), daemon=True).start()
 
 def scan_media():
     exts = {".mp3", ".ogg", ".wav", ".flac", ".xm", ".mod"}
@@ -128,6 +188,8 @@ def draw_status_bar(surf, fonts):
     now = datetime.datetime.now().strftime("%H:%M")
     info = fonts["sm"].render(f"WiFi  {now}", True, ACCENT)
     surf.blit(info, (SCREEN_W - info.get_width() - 8, 8))
+    # Battery indicator (right of clock, drawn over it if no battery detected)
+    draw_battery(surf, fonts["xs"], SCREEN_W - info.get_width() - 56, 8)
     pygame.draw.line(surf, BORDER, (0, 28), (SCREEN_W, 28), 1)
 
 def draw_section(surf, fonts, label):
@@ -538,6 +600,7 @@ class Settings:
                     self.volume = min(100, self.volume + 10); pygame.mixer.music.set_volume(self.volume / 100)
             elif ev.key in (pygame.K_RETURN, pygame.K_z, pygame.K_SPACE):
                 label = self.OPTS[self.cur][0]
+                if label == "Themes":  return "themes", None
                 if label == "Shutdown":
                     if IS_LINUX: subprocess.run(["poweroff"])
                 if label == "Back": return "back", None
@@ -573,6 +636,24 @@ def main():
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     pygame.display.set_caption("MintKit")
     clock  = pygame.time.Clock()
+
+    # ── Boot splash (shown once before any UI) ──────────────────────────────
+    show_splash(screen, clock)
+    # ── First boot achievement ───────────────────────────────────────────────
+    achievements.unlock("first_boot")  # no-op after the first time
+    # ── Logging (verbose in Dev Mode) ────────────────────────────────────────
+    import logging as _log
+    _log.basicConfig(
+        level=_log.DEBUG if settings_ui.get("dev_mode") else _log.WARNING,
+        format="%(levelname)s %(name)s: %(message)s"
+    )
+    # ── Sideload watcher (Dev Mode only) ─────────────────────────────────────
+    if settings_ui.get("dev_mode"):
+        import threading as _sthr
+        _sthr.Thread(target=sideload.watch, daemon=True).start()
+
+    # ── Sleep timer ─────────────────────────────────────────────────────────
+    sleep_timer = SleepTimer()
     fonts  = {
         "big":   pygame.font.SysFont("Courier New", 36, bold=True),
         "title": pygame.font.SysFont("Courier New", 20, bold=True),
@@ -592,26 +673,98 @@ def main():
     setts   = Settings(screen, fonts)
     menu.ota = ota
     ota.start_check()  # non-blocking background check
+    # ── OTA achievement ───────────────────────────────────────────────────────
+    # (unlocked after restart post-update; ota.apply_result is checked in loop)
+
+    # Track held keys for Select+Start overlay combo (I = K_x, II = K_z)
+    keys_held: set = set()
+
     state   = "boot"; active = boot
     while True:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
+
+            # ── Reset sleep timer on any input ──────────────────────────────
+            if ev.type in (pygame.KEYDOWN, pygame.KEYUP,
+                           pygame.MOUSEBUTTONDOWN, pygame.JOYBUTTONDOWN):
+                sleep_timer.reset()
+
+            # ── Track held keys ─────────────────────────────────────────────
+            if ev.type == pygame.KEYDOWN: keys_held.add(ev.key)
+            if ev.type == pygame.KEYUP:   keys_held.discard(ev.key)
+
             if state == "menu":
+                # ── Settings — Tab key ───────────────────────────────────────
+                if ev.type == pygame.KEYDOWN and ev.key == pygame.K_TAB:
+                    from launcher import settings as settings_mod
+                    settings_mod.run(screen, clock)
+                    _refresh_palette()
+                    continue
+                # ── MintShell — Backtick key ────────────────────────────────
+                if ev.type == pygame.KEYDOWN and ev.key == pygame.K_BACKQUOTE:
+                    achievements.unlock("mintshell_opened")
+                    from launcher import mintshell
+                    mintshell.run(screen, clock)
+                    continue
+                # ── Desktop Mode — Home key ──────────────────────────────────
+                if ev.type == pygame.KEYDOWN and ev.key == pygame.K_HOME:
+                    def _launch_from_desktop(app_id):
+                        g = next((g for g in load_games() if g["id"] == app_id), None)
+                        if g: launch(g, screen, clock)
+                    desktop.run(screen, clock, launch_cb=_launch_from_desktop)
+                    continue
+
                 act, data = menu.handle(ev)
                 if act == "select":
                     if data == "LIBRARY":    lib.games = load_games();   lib.cur = 0;     state = "library"; active = lib
                     elif data == "POCKETMALL": mall.catalog = load_catalog(); mall.cur = 0; state = "mall";    active = mall
-                    elif data == "FRIENDS":  friends.refresh(); friends.cur = 0;           state = "friends"; active = friends
+                    elif data == "FRIENDS":
+                        friends_ui.run(screen, clock)
+                        _refresh_palette()  # theme may have changed
+                        continue  # stay on menu state
                     elif data == "MEDIA":    media.tracks = scan_media(); media.cur = 0;   state = "media";   active = media
-                    elif data == "SETTINGS":                                                state = "settings"; active = setts
+                    elif data == "SETTINGS":  state = "settings"; active = setts
+
             elif state in ("library", "mall", "friends", "media", "settings"):
+                # ── Split-screen overlay — I+II held in Library ──────────────
+                if state == "library" and ev.type == pygame.KEYDOWN:
+                    if pygame.K_x in keys_held and pygame.K_z in keys_held:
+                        overlay.run(screen, clock, app_id="crystal-browser")
+                        continue
+
                 act, data = active.handle(ev)
-                if act == "back": menu.games = load_games(); state = "menu"; active = menu
-                elif act == "launch" and state == "library": launch(data)
+                if act == "back":
+                    menu.games = load_games(); state = "menu"; active = menu
+                    _refresh_palette()  # re-read theme after returning from settings
+                elif act == "themes":
+                    from launcher import themes_ui
+                    themes_ui.run(screen, clock)
+                    _refresh_palette()
+                elif act == "launch" and state == "library":
+                    launch(data, screen, clock)  # parental gate inside launch()
+
+        # ── Sleep timer tick (runs every frame) ─────────────────────────────
+        if state != "boot":
+            sleep_state = sleep_timer.tick()
+            if sleep_state == "shutdown":
+                if IS_LINUX: os.system("sudo poweroff")
+                else: pygame.quit(); sys.exit()
+
         if state == "boot":
             if boot.update(): state = "menu"; active = menu
             boot.draw()
-        else: active.draw()
+        else:
+            active.draw()
+            # ── Sleep warning overlay (drawn on top of current screen) ───────
+            if state != "boot" and sleep_timer.tick() == "warn":
+                sleep_timer.draw_warning(screen, fonts["menu"], fonts["sm"])
+
+        # ── Screenshot ring buffer (every frame) ─────────────────────────────
+        sc.push_frame(screen)
+        # ── Dev Mode FPS counter ──────────────────────────────────────────────
+        if settings_ui.get("dev_mode"):
+            _fps_s = fonts["xs"].render(f"{clock.get_fps():.0f} fps", True, ACCENT)
+            screen.blit(_fps_s, (SCREEN_W - _fps_s.get_width() - 4, 4))
         pygame.display.flip()
         clock.tick(FPS)
 

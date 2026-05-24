@@ -29,6 +29,17 @@ def save_cfg(cfg):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
 
+# ── Public helpers (used by other modules) ────────────────────────────────
+def get(key, default=None):
+    """Read a single setting value. Safe to call from any module."""
+    return load_cfg().get(key, default)
+
+def set_val(key, val):
+    """Write a single setting value."""
+    cfg = load_cfg()
+    cfg[key] = val
+    save_cfg(cfg)
+
 # ── Tabs ────────────────────────────────────────────────────────────────
 TABS = ["THEME", "WIFI", "DISPLAY", "SOUND", "SYSTEM"]
 
@@ -115,6 +126,49 @@ def sys_info():
     except: pass
     rows.append(("Python", platform.python_version()))
     return rows
+
+# ── Confirm dialog ───────────────────────────────────────────────────────
+def confirm_dialog(screen, clock, font, message: str) -> bool:
+    """Blocking yes/no dialog. Returns True if the user pressed Enter/Y."""
+    p   = th.get()
+    lines = message.split("\n")
+    running = True; result = False
+    while running:
+        clock.tick(30)
+        for ev in pygame.event.get():
+            if ev.type == pygame.KEYDOWN:
+                if ev.key in (pygame.K_RETURN, pygame.K_y): result = True; running = False
+                elif ev.key in (pygame.K_ESCAPE, pygame.K_n): running = False
+        screen.fill(p["bg"])
+        ov = pygame.Surface((640, 480), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 180)); screen.blit(ov, (0, 0))
+        pygame.draw.rect(screen, p["card"],   (60, 130, 520, 200), border_radius=6)
+        pygame.draw.rect(screen, p["accent"], (60, 130, 520, 200), 1, border_radius=6)
+        for i, line in enumerate(lines):
+            t = font.render(line, True, p["white"])
+            screen.blit(t, (320 - t.get_width() // 2, 148 + i * 22))
+        for i, (label, col) in enumerate([("Yes  (Enter)", p["accent"]), ("No   (Esc)", (220, 60, 60))]):
+            bx = 100 + i * 240
+            pygame.draw.rect(screen, col, (bx, 268, 180, 30), border_radius=4)
+            bt = font.render(label, True, p["black"])
+            screen.blit(bt, (bx + 90 - bt.get_width() // 2, 275))
+        pygame.display.flip()
+    return result
+
+# ── Dev Mode ──────────────────────────────────────────────────────────────
+DEV_WARN = (
+    "Dev Mode allows installing unofficial apps.\n"
+    "These are NOT reviewed by Crystal Kitsune Studios\n"
+    "and may damage your device. Continue?"
+)
+
+def toggle_dev_mode(screen, clock, font):
+    """Toggle dev_mode with a confirmation dialog when enabling."""
+    current = get("dev_mode", False)
+    if not current:
+        if not confirm_dialog(screen, clock, font, DEV_WARN):
+            return
+    set_val("dev_mode", not current)
 
 # ── Main entry point ──────────────────────────────────────────────────────
 def run(screen, clock):
@@ -275,6 +329,8 @@ def run(screen, clock):
                         subprocess.run(["sudo", "reboot"])
                     elif event.key == pygame.K_s:
                         subprocess.run(["sudo", "shutdown", "-h", "now"])
+                    elif event.key == pygame.K_d:
+                        toggle_dev_mode(screen, clock, font_sm)
 
         screen.fill(p["bg"])
         draw_header()
@@ -357,15 +413,18 @@ def run(screen, clock):
         elif tab == 4:  # System
             y = CONTENT_Y
             for label, value in system_rows:
-                if y+38 > SCREEN_H-40: break
+                if y+38 > SCREEN_H-80: break
                 draw_row(label, value, y); y += 40
-            y += 8
+            # Dev Mode toggle row
+            dev_on = get("dev_mode", False)
+            draw_row("Dev Mode", "ON ⚠" if dev_on else "OFF", y, sel=True); y += 40
+            y += 4
             for i, (lbl, col) in enumerate([("Reboot",p["accent"]),("Shutdown",(220,60,60))]):
                 bx = PAD + i*120
                 pygame.draw.rect(screen, col, (bx, y, 110, 28), border_radius=4)
                 bt = font_sm.render(lbl, True, p["black"])
                 screen.blit(bt, (bx+55-bt.get_width()//2, y+6))
-            draw_hint(("R","REBOOT"),("S","SHUTDOWN"),("Esc","BACK"))
+            draw_hint(("R","REBOOT"),("S","SHUTDOWN"),("D","DEV MODE"),("Esc","BACK"))
 
         pygame.display.flip()
 

@@ -1,0 +1,10 @@
+{
+  "id": "pocketcast",
+  "name": "PocketCast",
+  "developer": "CKS",
+  "category": "app",
+  "price": 0,
+  "desc": "Podcast & audio player for MintKit OS.",
+  "version": "1.0",
+  "entry": "main.py"
+}
