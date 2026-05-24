@@ -3,6 +3,8 @@
 # Terminal emulator for MintKit OS
 import os, sys, platform, subprocess, shlex, threading
 from collections import deque
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "launcher"))
+import achievements
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
@@ -42,6 +44,7 @@ cursor_vis = True
 cursor_tmr = 0
 scroll_off = 0   # lines scrolled up from bottom
 running_proc = None
+cmd_count = 0   # for achievements
 
 def push(text, color=None):
     color = color or WHITE
@@ -61,6 +64,10 @@ def run_command(cmd_str):
         return
 
     push(prompt() + cmd_str, ACCENT)
+    global cmd_count
+    cmd_count += 1
+    if cmd_str.startswith("sudo"): achievements.unlock("shell_sudo")
+    if cmd_count == 100: achievements.unlock("shell_100_cmds")
 
     # Built-ins
     if cmd_str == "clear":

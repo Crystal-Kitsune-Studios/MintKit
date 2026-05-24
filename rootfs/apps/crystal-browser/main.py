@@ -2,6 +2,8 @@
 # rootfs/apps/crystal-browser/main.py  --  Crystal Browser v1.1
 import os, sys, platform, urllib.request, html, re
 from collections import deque
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "launcher"))
+import achievements
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
@@ -30,21 +32,23 @@ BOOKMARKS = [
 def strip_html(raw):
     raw = re.sub(r'<style[^>]*>.*?</style>', '', raw, flags=re.DOTALL|re.IGNORECASE)
     raw = re.sub(r'<script[^>]*>.*?</script>', '', raw, flags=re.DOTALL|re.IGNORECASE)
-    raw = re.sub(r'<!(?:--.*?--|DOCTYPE[^>]*)>', '', raw, flags=re.DOTALL|re.IGNORECASE)
     raw = re.sub(r'<br\s*/?>', '\n', raw, flags=re.IGNORECASE)
-    # Block elements -> newlines (div critical for Wikipedia/most sites)
+    raw = re.sub(r'<!(?:--.*?--|DOCTYPE[^>]*)>', '', raw, flags=re.DOTALL|re.IGNORECASE)
+    # Block elements -> newlines (div is critical for Wikipedia/most sites)
     raw = re.sub(r'<(?:p|div|article|section|header|footer|nav|main|aside|td|th|tr)[^>]*>', '\n', raw, flags=re.IGNORECASE)
     raw = re.sub(r'</(?:p|div|article|section|header|footer|nav|main|aside|td|th|tr)>', '\n', raw, flags=re.IGNORECASE)
-    raw = re.sub(r'<h[1-6][^>]*>', '\n## ', raw, flags=re.IGNORECASE)
-    raw = re.sub(r'</h[1-6]>', '\n', raw, flags=re.IGNORECASE)
-    # List items - simple replacement avoids nested-tag bugs
-    raw = re.sub(r'<li[^>]*>', '\n\u2022 ', raw, flags=re.IGNORECASE)
+    # List items - simple open/close replacement avoids nested-tag bugs
+    raw = re.sub(r'<li[^>]*>', '\n• ', raw, flags=re.IGNORECASE)
     raw = re.sub(r'</li>', '', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'<BROKEN_PLACEHOLDER[^>]*>(.*?)</BROKEN_PLACEHOLDER>',
+                 lambda m: '\n\u2022 ' + re.sub(r'<[^>]+>', '', m.group(1)).strip(),
+                 raw, flags=re.DOTALL|re.IGNORECASE)
     raw = re.sub(r'<[^>]+>', '', raw)
     raw = html.unescape(raw)
+    # Collapse whitespace within each line without losing newlines
     raw = '\n'.join(' '.join(ln.split()) for ln in raw.split('\n'))
     return re.sub(r'\n{3,}', '\n\n', raw).strip()
-    
+
 def fetch(url):
     if not url.startswith("http"): url = "https://" + url
     try:
@@ -82,11 +86,15 @@ class CrystalBrowser:
         self.status = "Ready"
         self.CONTENT_H = SCREEN_H - self.CONTENT_Y - 44
         self.VIS = self.CONTENT_H // self.LINE_H
-        self.lines = ["Welcome to Crystal Browser.", "",
-            "Z/Enter = address bar   ←/→ = back/forward   ↑↓ = scroll", "",
+        self.show_logo = True   # show splash until first navigation
+        self.lines = ["",
+            "Z / Enter = address bar",
+            "← / →  = back / forward",
+            "↑ / ↓  = scroll", "",
             "Bookmarks:"] + [f"  [{i+1}] {b[0]}" for i, b in enumerate(BOOKMARKS)]
 
     def navigate(self, url):
+        self.show_logo = False
         if self.url: self.history.append((self.url, self.lines[:], self.scroll))
         self.fwd.clear(); self.url = url; self.status = f"Loading {url}..."
         self.lines = ["Loading..."]; self.scroll = 0
@@ -95,6 +103,9 @@ class CrystalBrowser:
         else:
             self.lines = wrap(text, self.fonts["xs"], SCREEN_W - 24)
             self.status = f"OK  {actual}"
+            achievements.unlock("browser_first")
+            if "wikipedia.org" in actual: achievements.unlock("browser_wiki")
+            if "ycombinator.com" in actual: achievements.unlock("browser_hn")
 
     def handle(self, ev):
         if ev.type != pygame.KEYDOWN: return None, None
@@ -127,7 +138,9 @@ class CrystalBrowser:
         s = self.screen; s.fill(BG)
         pygame.draw.rect(s, BAR, (0, 0, SCREEN_W, 48))
         pygame.draw.line(s, BORDER, (0, 48), (SCREEN_W, 48), 1)
-        s.blit(self.fonts["title"].render("CRYSTAL", True, ACCENT), (8, 12))
+        # Logo in top-left (small, 2 lines compressed)
+        s.blit(self.fonts["xs"].render("♦ CRYSTAL", True, ACCENT), (6, 8))
+        s.blit(self.fonts["xs"].render("  BROWSER", True, DIM), (6, 22))
         ab_x, ab_w = 90, SCREEN_W - 180
         ab_col = ACCENT if self.input_mode else BORDER
         pygame.draw.rect(s, (5, 13, 8), (ab_x, 10, ab_w, 26))

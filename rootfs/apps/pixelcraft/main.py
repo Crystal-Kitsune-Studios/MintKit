@@ -2,6 +2,8 @@
 # rootfs/apps/pixelcraft/main.py  --  PixelCraft v1.0
 import os, sys, platform, json, random
 from pathlib import Path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "launcher"))
+import achievements
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
@@ -15,7 +17,6 @@ FPS    = 60
 TILE   = 16
 COLS   = SCREEN_W  // TILE
 ROWS   = (SCREEN_H - 80) // TILE
-
 BG     = (10,  26,  16)
 ACCENT = (61, 204, 112)
 DIM    = (90, 150, 105)
@@ -77,6 +78,7 @@ class PixelCraft:
         self.cursor_x  = COLS // 2
         self.cursor_y  = ROWS  // 3
         self.msg = ""; self.msg_t = 0
+        self.blocks_placed = 0
 
     def get(self, x, y):
         if 0 <= x < COLS and 0 <= y < ROWS: return self.world[x][y]
@@ -94,6 +96,9 @@ class PixelCraft:
             elif ev.key in (pygame.K_RIGHT, pygame.K_d): self.cursor_x = min(COLS-1, self.cursor_x+1)
             elif ev.key in (pygame.K_z, pygame.K_RETURN, pygame.K_SPACE):
                 self.set(self.cursor_x, self.cursor_y, self.cur_block)
+                self.blocks_placed += 1
+                achievements.unlock("pixelcraft_first_block")
+                if self.blocks_placed >= 100: achievements.unlock("pixelcraft_builder")
             elif ev.key == pygame.K_x:
                 self.set(self.cursor_x, self.cursor_y, 0)
             elif ev.key == pygame.K_q:
@@ -105,6 +110,7 @@ class PixelCraft:
             elif ev.key == pygame.K_F5:
                 save_world(self.world)
                 self.msg = "World saved!"; self.msg_t = FPS * 2
+                achievements.unlock("pixelcraft_saved")
             elif ev.key == pygame.K_ESCAPE:
                 save_world(self.world); return "back", None
             vx = SCREEN_W // TILE; vy = (SCREEN_H - 80) // TILE

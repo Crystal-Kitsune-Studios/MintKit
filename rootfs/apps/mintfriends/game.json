@@ -1,0 +1,10 @@
+{
+  "id": "mintfriends",
+  "name": "Friends",
+  "developer": "CKS",
+  "category": "app",
+  "price": 0,
+  "desc": "Friends list and local high score leaderboard.",
+  "version": "1.0",
+  "entry": "main.py"
+}

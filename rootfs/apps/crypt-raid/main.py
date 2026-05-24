@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # rootfs/apps/crypt-raid/main.py  --  Crypt Raid v1.0
-import os, sys, random, platform
-from collections import deque
+import os, sys, platform, random
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "launcher"))
+import achievements
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
@@ -11,256 +12,203 @@ if IS_LINUX:
 import pygame
 
 SCREEN_W, SCREEN_H = 640, 480
-TILE   = 20
-MAP_W, MAP_H = 31, 21
-FPS    = 60
-VIEW_X = (SCREEN_W - MAP_W * TILE) // 2
-VIEW_Y = 48
+FPS   = 60
+TILE  = 20
+COLS  = SCREEN_W // TILE
+ROWS  = (SCREEN_H - 80) // TILE
 
-BG     = (10,  26,  16)
-WALL_C = (13,  32,  16)
-FLOOR_C= (18,  45,  22)
+BG     = (5,   10,   8)
 ACCENT = (61, 204, 112)
-DIM    = (90, 150, 105)
+DIM    = (60, 100,  70)
 WHITE  = (180, 240, 195)
-RED    = (220,  60,  60)
-GOLD   = (240, 200,  60)
-BLUE   = ( 60, 140, 220)
-FOG    = ( 12,  30,  18)
-BORDER = ( 29, 100,  55)
+BORDER = (29, 100,  55)
+BAR    = ( 6,  13,   8)
+RED    = (200,  50,  50)
+GOLD   = (220, 180,  40)
 
-WALL_T, FLOOR_T, STAIR_T = 0, 1, 2
+# Tile types
+EMPTY = 0; WALL = 1; FLOOR = 2; STAIR = 3; CHEST = 4
 
-# ---- Dungeon ----
-class Room:
-    def __init__(self, x, y, w, h): self.x,self.y,self.w,self.h=x,y,w,h
-    def center(self): return self.x+self.w//2, self.y+self.h//2
-    def intersects(self, o, p=1):
-        return (self.x-p < o.x+o.w and self.x+self.w+p > o.x and
-                self.y-p < o.y+o.h and self.y+self.h+p > o.y)
-
-def make_dungeon(floor_num):
-    tiles = [[WALL_T]*MAP_H for _ in range(MAP_W)]
+def make_dungeon():
+    grid = [[WALL] * ROWS for _ in range(COLS)]
     rooms = []
-    for _ in range(30):
-        w=random.randint(4,9); h=random.randint(3,7)
-        x=random.randint(1,MAP_W-w-1); y=random.randint(1,MAP_H-h-1)
-        r=Room(x,y,w,h)
-        if any(r.intersects(o) for o in rooms): continue
-        rooms.append(r)
-        for rx in range(r.x,r.x+r.w):
-            for ry in range(r.y,r.y+r.h): tiles[rx][ry]=FLOOR_T
-        if len(rooms)>=2:
-            cx,cy=r.center(); px,py=rooms[-2].center()
-            for tx in range(min(cx,px),max(cx,px)+1): tiles[tx][cy]=FLOOR_T
-            for ty in range(min(cy,py),max(cy,py)+1): tiles[px][ty]=FLOOR_T
+    for _ in range(8):
+        w = random.randint(4, 9); h = random.randint(3, 7)
+        x = random.randint(1, COLS - w - 1); y = random.randint(1, ROWS - h - 1)
+        for rx in range(x, x + w):
+            for ry in range(y, y + h):
+                grid[rx][ry] = FLOOR
+        rooms.append((x + w // 2, y + h // 2))
+    for i in range(len(rooms) - 1):
+        x1, y1 = rooms[i]; x2, y2 = rooms[i + 1]
+        while x1 != x2:
+            grid[x1][y1] = FLOOR; x1 += 1 if x2 > x1 else -1
+        while y1 != y2:
+            grid[x1][y1] = FLOOR; y1 += 1 if y2 > y1 else -1
+    # Place stairs and chests
     if rooms:
-        sx,sy=rooms[-1].center(); tiles[sx][sy]=STAIR_T
-    start=rooms[0].center() if rooms else (MAP_W//2,MAP_H//2)
-    return tiles,rooms,start
+        sx, sy = rooms[-1]; grid[sx][sy] = STAIR
+        for _ in range(3):
+            cx, cy = random.choice(rooms[:-1])
+            grid[cx + random.randint(-1,1)][cy + random.randint(-1,1)] = CHEST
+    return grid, rooms[0] if rooms else (1, 1)
 
-# ---- Entities ----
-class Entity:
-    def __init__(self,x,y,char,color,name,hp,atk,dfn):
-        self.x,self.y=x,y; self.char=char; self.color=color; self.name=name
-        self.hp=hp; self.max_hp=hp; self.atk=atk; self.dfn=dfn; self.alive=True
+class Enemy:
+    def __init__(self, x, y, hp, symbol, color):
+        self.x = x; self.y = y; self.hp = hp; self.max_hp = hp
+        self.symbol = symbol; self.color = color; self.move_t = 0
 
-ENEMY_TYPES=[("Skeleton","S",DIM,6,2,0),("Ghost","G",BLUE,5,3,1),("Demon","D",RED,10,4,1)]
-ITEM_TYPES =[("Health Potion","!",ACCENT,"heal",15),("Steel Sword","/",GOLD,"atk",2),("Iron Shield","o",BLUE,"def",1)]
-
-def spawn_enemies(rooms,ps,floor_num):
-    out=[]; n=min(3+floor_num*2,12)
-    for room in rooms[1:]:
-        if n<=0: break
-        t=random.choice(ENEMY_TYPES); ex,ey=room.center()
-        if (ex,ey)!=ps:
-            out.append(Entity(ex,ey,t[1],t[2],t[0],t[3]+floor_num,t[4]+floor_num//2,t[5]))
-            n-=1
-    return out
-
-def spawn_items(rooms):
-    out=[]
-    for room in rooms[1::2]:
-        t=random.choice(ITEM_TYPES); cx,cy=room.center()
-        out.append({"x":cx+random.randint(-1,1),"y":cy+random.randint(-1,1),
-                    "name":t[0],"char":t[1],"color":t[2],"type":t[3],"val":t[4]})
-    return out
-
-def compute_fov(tiles,px,py,r=8):
-    vis=set()
-    for dx in range(-r,r+1):
-        for dy in range(-r,r+1):
-            if dx*dx+dy*dy>r*r: continue
-            tx,ty=px+dx,py+dy
-            if not(0<=tx<MAP_W and 0<=ty<MAP_H): continue
-            steps=max(abs(tx-px),abs(ty-py)); blocked=False
-            for i in range(1,steps):
-                ix=round(px+(tx-px)*i/steps); iy=round(py+(ty-py)*i/steps)
-                if 0<=ix<MAP_W and 0<=iy<MAP_H and tiles[ix][iy]==WALL_T:
-                    blocked=True; break
-            if not blocked: vis.add((tx,ty))
-    return vis
-
-# ---- Game ----
 class CryptRaid:
-    def __init__(self,screen,fonts):
-        self.screen=screen; self.fonts=fonts
-        self.floor=1; self.score=0; self.log=deque(maxlen=3)
-        self.game_over=False; self.won=False
-        self.new_floor()
+    def __init__(self, screen, fonts):
+        self.screen = screen; self.fonts = fonts
+        self.new_floor(1)
+        self.total_kills = 0
 
-    def new_floor(self):
-        self.tiles,self.rooms,ps=make_dungeon(self.floor)
-        self.player=Entity(*ps,"@",ACCENT,"Player",20+self.floor*2,4+self.floor,2)
-        self.player.xp=0
-        self.enemies=spawn_enemies(self.rooms,ps,self.floor)
-        self.items=spawn_items(self.rooms)
-        self.seen=set(); self.update_fov()
-        self.log.append(f"Floor {self.floor} - Descended.")
+    def new_floor(self, floor):
+        self.floor = floor
+        self.grid, start = make_dungeon()
+        self.px, self.py = start
+        self.hp = getattr(self, 'hp', 20); self.max_hp = 20
+        self.gold = getattr(self, 'gold', 0)
+        self.atk = 3 + floor; self.msg = f"Floor {floor}"; self.msg_t = FPS * 2
+        if floor >= 5: achievements.unlock("crypt_floor5")
+        if floor >= 10: achievements.unlock("crypt_floor10")
+        self.enemies = []
+        for _ in range(3 + floor):
+            for _ in range(50):
+                ex = random.randint(1, COLS - 2); ey = random.randint(1, ROWS - 2)
+                if self.grid[ex][ey] == FLOOR and (ex, ey) != start:
+                    hp = random.randint(3, 5 + floor)
+                    sym = random.choice(["g", "s", "o", "d"])
+                    col = random.choice([RED, (180,100,60), (100,80,200), DIM])
+                    self.enemies.append(Enemy(ex, ey, hp, sym, col)); break
 
-    def update_fov(self):
-        self.visible=compute_fov(self.tiles,self.player.x,self.player.y)
-        self.seen|=self.visible
-
-    def enemy_at(self,x,y):
-        return next((e for e in self.enemies if e.alive and e.x==x and e.y==y),None)
-
-    def item_at(self,x,y):
-        return next((i for i in self.items if i["x"]==x and i["y"]==y),None)
-
-    def attack(self,a,d):
-        dmg=max(0,a.atk-d.dfn+random.randint(-1,2)); d.hp-=dmg
-        if d.hp<=0: d.alive=False
-        return dmg
-
-    def move_player(self,dx,dy):
-        if self.game_over or self.won: return
-        nx,ny=self.player.x+dx,self.player.y+dy
-        if not(0<=nx<MAP_W and 0<=ny<MAP_H): return
-        if self.tiles[nx][ny]==WALL_T: return
-        e=self.enemy_at(nx,ny)
-        if e:
-            dmg=self.attack(self.player,e)
-            if e.alive: self.log.append(f"Hit {e.name} {dmg}dmg ({e.hp}hp)")
-            else:
-                xp=5+self.floor; self.player.xp+=xp; self.score+=xp
-                self.log.append(f"{e.name} slain! +{xp}XP")
-                self.enemies=[en for en in self.enemies if en.alive]
-            self.enemy_turn(); return
-        it=self.item_at(nx,ny)
-        if it:
-            self.items.remove(it)
-            if it["type"]=="heal":
-                h=min(it["val"],self.player.max_hp-self.player.hp); self.player.hp+=h
-                self.log.append(f"{it['name']} +{h}HP")
-            elif it["type"]=="atk":
-                self.player.atk+=it["val"]; self.log.append(f"{it['name']} +{it['val']}ATK")
-            elif it["type"]=="def":
-                self.player.dfn+=it["val"]; self.log.append(f"{it['name']} +{it['val']}DEF")
-        self.player.x,self.player.y=nx,ny; self.update_fov()
-        if self.tiles[nx][ny]==STAIR_T:
-            self.floor+=1
-            if self.floor>5: self.won=True; self.log.append("Escaped! Victory!")
-            else: self.new_floor()
-            return
-        self.enemy_turn()
-
-    def enemy_turn(self):
-        px,py=self.player.x,self.player.y
+    def move_enemies(self):
         for e in self.enemies:
-            if not e.alive or (e.x,e.y) not in self.visible: continue
-            dx=0 if e.x==px else(1 if e.x<px else -1)
-            dy=0 if e.y==py else(1 if e.y<py else -1)
-            nx,ny=e.x+dx,e.y+dy
-            if nx==px and ny==py:
-                dmg=self.attack(e,self.player)
-                self.log.append(f"{e.name} hits {dmg}! ({self.player.hp}hp)")
-                if self.player.hp<=0:
-                    self.player.alive=False; self.game_over=True
-                    self.log.append("You died. Game Over.")
-            elif self.tiles[nx][ny]!=WALL_T and not self.enemy_at(nx,ny):
-                e.x,e.y=nx,ny
+            e.move_t += 1
+            if e.move_t < 30: continue
+            e.move_t = 0
+            dx = 0; dy = 0
+            if abs(e.x - self.px) + abs(e.y - self.py) < 8:
+                dx = (1 if self.px > e.x else -1) if e.x != self.px else 0
+                dy = (1 if self.py > e.y else -1) if e.y != self.py else 0
+            else:
+                dx, dy = random.choice([(0,1),(0,-1),(1,0),(-1,0)])
+            nx, ny = e.x + dx, e.y + dy
+            if nx == self.px and ny == self.py:
+                dmg = random.randint(1, 3)
+                self.hp -= dmg; self.msg = f"-{dmg} HP!"; self.msg_t = FPS
+            elif 0 <= nx < COLS and 0 <= ny < ROWS and self.grid[nx][ny] != WALL:
+                e.x = nx; e.y = ny
 
-    def handle(self,ev):
-        if ev.type==pygame.KEYDOWN:
-            if self.game_over or self.won:
-                if ev.key in(pygame.K_RETURN,pygame.K_z,pygame.K_ESCAPE): return"back",None
-                return None,None
-            moves={pygame.K_UP:(0,-1),pygame.K_w:(0,-1),pygame.K_DOWN:(0,1),pygame.K_s:(0,1),
-                   pygame.K_LEFT:(-1,0),pygame.K_a:(-1,0),pygame.K_RIGHT:(1,0),pygame.K_d:(1,0)}
-            if ev.key in moves: self.move_player(*moves[ev.key])
-            elif ev.key in(pygame.K_ESCAPE,pygame.K_x): return"back",None
-        return None,None
+    def handle(self, ev):
+        if self.hp <= 0:
+            if ev.type == pygame.KEYDOWN:
+                if ev.key in (pygame.K_RETURN, pygame.K_z): self.__init__(self.screen, self.fonts)
+                elif ev.key == pygame.K_ESCAPE: return "back", None
+            return None, None
+        if self.msg_t > 0: self.msg_t -= 1
+        if ev.type == pygame.KEYDOWN:
+            dx = dy = 0
+            if ev.key in (pygame.K_UP, pygame.K_w):    dy = -1
+            elif ev.key in (pygame.K_DOWN, pygame.K_s): dy = 1
+            elif ev.key in (pygame.K_LEFT, pygame.K_a): dx = -1
+            elif ev.key in (pygame.K_RIGHT, pygame.K_d): dx = 1
+            elif ev.key == pygame.K_ESCAPE: return "back", None
+            if dx or dy:
+                nx, ny = self.px + dx, self.py + dy
+                hit = next((e for e in self.enemies if e.x == nx and e.y == ny), None)
+                if hit:
+                    dmg = random.randint(self.atk - 1, self.atk + 1)
+                    hit.hp -= dmg; self.msg = f"Hit! -{dmg}"; self.msg_t = FPS
+                    if hit.hp <= 0:
+                        self.enemies.remove(hit)
+                        self.gold += random.randint(1, 3)
+                        self.msg = f"Defeated! +gold"; self.msg_t = FPS
+                        self.total_kills += 1
+                        achievements.unlock("crypt_first_kill")
+                        if self.total_kills >= 100: achievements.unlock("crypt_100_kills")
+                elif 0 <= nx < COLS and 0 <= ny < ROWS and self.grid[nx][ny] != WALL:
+                    self.px, self.py = nx, ny
+                    tile = self.grid[nx][ny]
+                    if tile == CHEST:
+                        g = random.randint(2, 8); self.gold += g
+                        self.msg = f"Chest! +{g}g"; self.msg_t = FPS * 2
+                        self.grid[nx][ny] = FLOOR
+                        heal = random.randint(2, 5); self.hp = min(self.max_hp, self.hp + heal)
+                    elif tile == STAIR:
+                        self.new_floor(self.floor + 1); return None, None
+                self.move_enemies()
+        return None, None
 
     def draw(self):
-        s=self.screen; s.fill(BG)
-        pygame.draw.line(s,BORDER,(0,28),(SCREEN_W,28),1)
-        s.blit(self.fonts["title"].render("CRYPT RAID",True,ACCENT),
-               (SCREEN_W//2-self.fonts["title"].size("CRYPT RAID")[0]//2,4))
-        s.blit(self.fonts["sm"].render(f"Floor {self.floor}/5",True,DIM),(8,8))
-        sc=self.fonts["sm"].render(f"Score:{self.score}",True,DIM)
-        s.blit(sc,(SCREEN_W-sc.get_width()-8,8))
-        for tx in range(MAP_W):
-            for ty in range(MAP_H):
-                sx=VIEW_X+tx*TILE; sy=VIEW_Y+ty*TILE
-                if (tx,ty) in self.visible:
-                    t=self.tiles[tx][ty]
-                    if t==WALL_T:
-                        pygame.draw.rect(s,WALL_C,(sx,sy,TILE,TILE))
-                        pygame.draw.rect(s,BORDER,(sx,sy,TILE,TILE),1)
-                    else:
-                        pygame.draw.rect(s,FLOOR_C,(sx,sy,TILE,TILE))
-                        if t==STAIR_T:
-                            gi=self.fonts["sm"].render(">",True,GOLD)
-                            s.blit(gi,(sx+TILE//2-gi.get_width()//2,sy+TILE//2-gi.get_height()//2))
-                elif (tx,ty) in self.seen:
-                    pygame.draw.rect(s,FOG,(sx,sy,TILE,TILE))
-        for it in self.items:
-            if (it["x"],it["y"]) in self.visible:
-                sx=VIEW_X+it["x"]*TILE; sy=VIEW_Y+it["y"]*TILE
-                ci=self.fonts["sm"].render(it["char"],True,it["color"])
-                s.blit(ci,(sx+TILE//2-ci.get_width()//2,sy+TILE//2-ci.get_height()//2))
+        s = self.screen; s.fill(BG)
+        cx = max(0, min(COLS - SCREEN_W // TILE, self.px - SCREEN_W // TILE // 2))
+        cy = max(0, min(ROWS - (SCREEN_H - 80) // TILE, self.py - (SCREEN_H - 80) // TILE // 2))
+        for x in range(SCREEN_W // TILE + 1):
+            for y in range((SCREEN_H - 80) // TILE + 1):
+                wx, wy = cx + x, cy + y
+                if wx >= COLS or wy >= ROWS: continue
+                t = self.grid[wx][wy]; px = x * TILE; py = 40 + y * TILE
+                if t == WALL:  pygame.draw.rect(s, (20, 40, 25), (px, py, TILE, TILE))
+                elif t == FLOOR: pygame.draw.rect(s, (8, 18, 10), (px, py, TILE, TILE))
+                elif t == STAIR:
+                    pygame.draw.rect(s, (8, 18, 10), (px, py, TILE, TILE))
+                    sc = self.fonts["xs"].render(">", True, ACCENT)
+                    s.blit(sc, (px + 5, py + 3))
+                elif t == CHEST:
+                    pygame.draw.rect(s, (8, 18, 10), (px, py, TILE, TILE))
+                    cc = self.fonts["xs"].render("$", True, GOLD)
+                    s.blit(cc, (px + 5, py + 3))
         for e in self.enemies:
-            if e.alive and (e.x,e.y) in self.visible:
-                sx=VIEW_X+e.x*TILE; sy=VIEW_Y+e.y*TILE
-                ei=self.fonts["sm"].render(e.char,True,e.color)
-                s.blit(ei,(sx+TILE//2-ei.get_width()//2,sy+TILE//2-ei.get_height()//2))
-        px=VIEW_X+self.player.x*TILE; py=VIEW_Y+self.player.y*TILE
-        pi=self.fonts["sm"].render("@",True,ACCENT)
-        s.blit(pi,(px+TILE//2-pi.get_width()//2,py+TILE//2-pi.get_height()//2))
-        hy=VIEW_Y+MAP_H*TILE+4
-        hp_pct=self.player.hp/self.player.max_hp
-        pygame.draw.rect(s,BORDER,(8,hy,120,10))
-        pygame.draw.rect(s,RED if hp_pct<0.3 else ACCENT,(8,hy,int(120*hp_pct),10))
-        s.blit(self.fonts["xs"].render(f"HP {self.player.hp}/{self.player.max_hp}",True,WHITE),(8,hy+12))
-        s.blit(self.fonts["xs"].render(f"ATK:{self.player.atk} DEF:{self.player.dfn} XP:{self.player.xp}",True,DIM),(140,hy+12))
-        ly=hy+26
-        for msg in self.log:
-            s.blit(self.fonts["xs"].render(msg[:80],True,DIM),(8,ly)); ly+=13
-        if self.game_over or self.won:
-            ov=pygame.Surface((SCREEN_W,SCREEN_H),pygame.SRCALPHA); ov.fill((0,0,0,160)); s.blit(ov,(0,0))
-            col=GOLD if self.won else RED
-            mi=self.fonts["big"].render("VICTORY!" if self.won else "GAME OVER",True,col)
-            s.blit(mi,(SCREEN_W//2-mi.get_width()//2,SCREEN_H//2-30))
-            si=self.fonts["sm"].render(f"Score:{self.score}  Press Z to exit",True,DIM)
-            s.blit(si,(SCREEN_W//2-si.get_width()//2,SCREEN_H//2+20))
+            ex = (e.x - cx) * TILE; ey = 40 + (e.y - cy) * TILE
+            if 0 <= ex < SCREEN_W and 40 <= ey < SCREEN_H - 40:
+                ec = self.fonts["sm"].render(e.symbol, True, e.color)
+                s.blit(ec, (ex + 4, ey + 2))
+        ppx = (self.px - cx) * TILE; ppy = 40 + (self.py - cy) * TILE
+        pc = self.fonts["sm"].render("@", True, ACCENT)
+        s.blit(pc, (ppx + 4, ppy + 2))
+        pygame.draw.rect(s, BAR, (0, 0, SCREEN_W, 38))
+        pygame.draw.line(s, BORDER, (0, 38), (SCREEN_W, 38), 1)
+        s.blit(self.fonts["sm"].render(f"Floor {self.floor}  HP:{self.hp}/{self.max_hp}  Gold:{self.gold}", True, ACCENT), (8, 10))
+        if self.msg_t > 0:
+            mi = self.fonts["sm"].render(self.msg, True, GOLD)
+            s.blit(mi, (SCREEN_W - mi.get_width() - 8, 10))
+        if self.hp <= 0:
+            ov = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+            ov.fill((0, 0, 0, 180)); s.blit(ov, (0, 0))
+            blit_c = lambda img, y: s.blit(img, (SCREEN_W // 2 - img.get_width() // 2, y))
+            blit_c(self.fonts["big"].render("GAME OVER", True, RED), SCREEN_H // 2 - 40)
+            blit_c(self.fonts["sm"].render(f"Floor {self.floor}  Gold {self.gold}", True, DIM), SCREEN_H // 2 + 10)
+            blit_c(self.fonts["sm"].render("Z = Restart   Esc = Exit", True, DIM), SCREEN_H // 2 + 34)
+            return
+        pygame.draw.line(s, BORDER, (0, SCREEN_H - 34), (SCREEN_W, SCREEN_H - 34), 1)
+        x = 6
+        for key, act in [("WASD/\u2191\u2191\u2193\u2190\u2192", "MOVE/ATTACK"), ("Esc", "EXIT")]:
+            ki = self.fonts["xs"].render(key, True, (5,10,8)); kw = ki.get_width() + 8
+            pygame.draw.rect(s, ACCENT, (x, SCREEN_H-26, kw, 18)); s.blit(ki, (x+4, SCREEN_H-24)); x += kw+4
+            ai = self.fonts["xs"].render(act, True, DIM); s.blit(ai, (x, SCREEN_H-24)); x += ai.get_width()+16
 
 def main():
     pygame.init()
-    screen=pygame.display.set_mode((SCREEN_W,SCREEN_H))
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
     pygame.display.set_caption("Crypt Raid")
-    clock=pygame.time.Clock()
-    fonts={"big":pygame.font.SysFont("Courier New",36,bold=True),
-           "title":pygame.font.SysFont("Courier New",20,bold=True),
-           "menu":pygame.font.SysFont("Courier New",16,bold=True),
-           "sm":pygame.font.SysFont("Courier New",14),
-           "xs":pygame.font.SysFont("Courier New",12)}
-    game=CryptRaid(screen,fonts)
+    clock = pygame.time.Clock()
+    fonts = {
+        "big":   pygame.font.SysFont("Courier New", 36, bold=True),
+        "title": pygame.font.SysFont("Courier New", 20, bold=True),
+        "menu":  pygame.font.SysFont("Courier New", 19, bold=True),
+        "sm":    pygame.font.SysFont("Courier New", 13),
+        "xs":    pygame.font.SysFont("Courier New", 12),
+    }
+    game = CryptRaid(screen, fonts)
     while True:
         for ev in pygame.event.get():
-            if ev.type==pygame.QUIT: pygame.quit(); sys.exit()
-            act,_=game.handle(ev)
-            if act=="back": pygame.quit(); sys.exit()
-        game.draw(); pygame.display.flip(); clock.tick(FPS)
+            if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
+            act, _ = game.handle(ev)
+            if act == "back": pygame.quit(); sys.exit()
+        game.draw()
+        pygame.display.flip()
+        clock.tick(FPS)
 
-if __name__=="__main__": main()
+if __name__ == "__main__": main()

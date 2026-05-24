@@ -47,6 +47,11 @@ ACHIEVEMENTS = {
     "draw_first":       {"name": "Pixel Artist",            "desc": "Save your first drawing.",                 "icon": "🎨", "game": "pocketdraw"},
     "draw_10":          {"name": "Gallery",                 "desc": "Save 10 drawings.",                        "icon": "🖼️", "game": "pocketdraw"},
 
+    # ─ PixelCraft ─────────────────────────────────────────────────
+    "pixelcraft_first_block": {"name": "First Block",       "desc": "Place your first block in PixelCraft.",     "icon": "🟩", "game": "pixelcraft"},
+    "pixelcraft_builder":     {"name": "Master Builder",    "desc": "Place 100 blocks in PixelCraft.",           "icon": "🏗️", "game": "pixelcraft"},
+    "pixelcraft_saved":       {"name": "World Keeper",      "desc": "Save your world in PixelCraft.",            "icon": "💾", "game": "pixelcraft"},
+
     # ─ MintShell ──────────────────────────────────────────────────
     "shell_100_cmds":   {"name": "Power User",              "desc": "Run 100 commands in MintShell.",            "icon": "⚡", "game": "mintshell"},
     "shell_sudo":       {"name": "Root Access",             "desc": "Run a sudo command in MintShell.",          "icon": "🔐", "game": "mintshell"},
