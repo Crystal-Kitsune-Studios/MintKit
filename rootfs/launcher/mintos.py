@@ -31,6 +31,7 @@ CATALOG_FILE = DATA_DIR / "catalog.json"
 
 VERSION   = "MintKit 1.0-alpha"
 STORE_URL = "crystal-kitsune-studios.com"
+
 SCREEN_W, SCREEN_H = 640, 480
 FPS = 60
 
@@ -54,6 +55,7 @@ BUILTIN_CATALOG = [
     {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app."},
     {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app."},
 ]
+
 
 def load_catalog():
     if CATALOG_FILE.exists():
@@ -114,6 +116,7 @@ def scan_media():
     exts = {".mp3", ".ogg", ".wav", ".flac", ".xm", ".mod"}
     return sorted([p for p in MEDIA_DIR.iterdir() if p.suffix.lower() in exts]) if MEDIA_DIR.exists() else []
 
+
 # --- Drawing helpers ---
 def blit_c(surf, img, y):
     surf.blit(img, (SCREEN_W // 2 - img.get_width() // 2, y))
@@ -142,6 +145,7 @@ def draw_hints(surf, fonts, hints):
         ai = fonts["xs"].render(action, True, DIM)
         surf.blit(ai, (x, SCREEN_H - 24)); x += ai.get_width() + 16
 
+
 # ===================== SCREENS =====================
 
 class Boot:
@@ -155,10 +159,12 @@ class Boot:
         blit_c(s, self.fonts["sm"].render(VERSION, True, DIM), SCREEN_H // 2 + 10)
         blit_c(s, self.fonts["sm"].render("." * ((self.t // 10) % 4), True, DIM), SCREEN_H // 2 + 34)
 
+
 class MainMenu:
     def __init__(self, screen, fonts, games):
         self.screen = screen; self.fonts = fonts; self.games = games; self.cur = 0
         self.ota = None  # set from main() after OtaManager is created
+
     def items(self):
         n = len(self.games)
         return [
@@ -168,6 +174,7 @@ class MainMenu:
             ("MEDIA",      None),
             ("SETTINGS",   VERSION),
         ]
+
     def handle(self, ev):
         items = self.items()
         if ev.type == pygame.KEYDOWN:
@@ -179,6 +186,7 @@ class MainMenu:
                 if self.ota and self.ota.update_available and not self.ota.applying:
                     self.ota.start_apply()
         return None, None
+
     def draw(self):
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "HOME")
@@ -209,9 +217,11 @@ class MainMenu:
             if success: self.ota.restart_launcher()
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("X/Esc", "BACK")])
 
+
 class Library:
     def __init__(self, screen, fonts, games):
         self.screen = screen; self.fonts = fonts; self.games = games; self.cur = 0
+
     def handle(self, ev):
         if ev.type == pygame.KEYDOWN:
             if ev.key in (pygame.K_DOWN, pygame.K_s):   self.cur = (self.cur + 1) % max(1, len(self.games))
@@ -220,6 +230,7 @@ class Library:
                 if self.games: return "launch", self.games[self.cur]
             elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
         return None, None
+
     def draw(self):
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "LIBRARY")
@@ -239,8 +250,10 @@ class Library:
                 s.blit(self.fonts["sm"].render(g.get("developer", ""), True, DIM), (32, y + 28))
         draw_hints(s, self.fonts, [("Z/Enter", "LAUNCH"), ("X/Esc", "BACK")])
 
+
 class PocketMall:
     CATS = ["ALL", "GAME", "APP", "EMU", "MEDIA"]
+
     def __init__(self, screen, fonts):
         self.screen   = screen; self.fonts = fonts
         self.catalog  = load_catalog()
@@ -248,9 +261,11 @@ class PocketMall:
         self.msg = ""; self.msg_t = 0
         self.purchase_url = None; self.purchase_app = None
         self.purchase_qr  = None; self.polling = False; self.poll_t = 0
+
     def filtered(self):
         cat = self.CATS[self.cat_idx]
         return self.catalog if cat == "ALL" else [a for a in self.catalog if a["category"].upper() == cat]
+
     def handle(self, ev):
         if self.msg_t > 0: self.msg_t -= 1
         if ev.type == pygame.KEYDOWN:
@@ -279,6 +294,7 @@ class PocketMall:
                         self.polling = False
                     else: return "back", None
         return None, None
+
     def draw(self):
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "POCKETMALL")
@@ -289,6 +305,7 @@ class PocketMall:
             mx = SCREEN_W // 2 - mi.get_width() // 2
             pygame.draw.rect(s, CARD_SEL, (mx - 8, SCREEN_H - 58, mi.get_width() + 16, 20))
             s.blit(mi, (mx, SCREEN_H - 56))
+
     def _draw_list(self, s):
         tab_w = SCREEN_W // len(self.CATS)
         for i, cat in enumerate(self.CATS):
@@ -318,6 +335,7 @@ class PocketMall:
                     s.blit(ci, (SCREEN_W - 26, y + 6))
                 s.blit(self.fonts["xs"].render(app["developer"], True, DIM), (32, y + item_h - 16))
         draw_hints(s, self.fonts, [("\u2190/\u2192", "CATEGORY"), ("Z/Enter", "DETAILS"), ("X/Esc", "BACK")])
+
     def _draw_detail(self, s):
         app = self.detail; y = 60
         s.blit(self.fonts["menu"].render(app["name"], True, WHITE), (16, y + 4))
@@ -347,13 +365,16 @@ class PocketMall:
         s.blit(bi, (bx + 12, by + 7))
         draw_hints(s, self.fonts, [("Z/Enter", "INSTALL/REMOVE"), ("X/Esc", "BACK")])
 
+
 class Friends:
     def __init__(self, screen, fonts):
         self.screen  = screen; self.fonts = fonts
         self.friends = load_friends(); self.cur = 0
         self.mode = "list"; self.input = ""
         self.msg = ""; self.msg_t = 0
+
     def refresh(self): self.friends = load_friends()
+
     def handle(self, ev):
         if self.msg_t > 0: self.msg_t -= 1
         if self.mode == "add":
@@ -381,6 +402,7 @@ class Friends:
                     self.msg = f"Removed {removed}"; self.msg_t = FPS * 2
             elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
         return None, None
+
     def draw(self):
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "FRIENDS")
@@ -411,6 +433,7 @@ class Friends:
             mi = self.fonts["sm"].render(self.msg, True, ACCENT); blit_c(s, mi, SCREEN_H - 56)
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("Del", "REMOVE"), ("X/Esc", "BACK")])
 
+
 class Media:
     def __init__(self, screen, fonts):
         self.screen  = screen; self.fonts = fonts
@@ -418,6 +441,7 @@ class Media:
         self.playing = False; self.paused = False
         self.track_start = 0
         pygame.mixer.init()
+
     def play(self, idx=None):
         if idx is not None: self.cur = idx
         t = self.tracks[self.cur] if self.tracks else None
@@ -427,17 +451,22 @@ class Media:
             self.playing = True; self.paused = False
             self.track_start = pygame.time.get_ticks()
         except Exception: self.playing = False
+
     def stop(self):
         pygame.mixer.music.stop(); self.playing = False; self.paused = False
+
     def toggle_pause(self):
         if self.playing and not self.paused: pygame.mixer.music.pause(); self.paused = True
         elif self.paused: pygame.mixer.music.unpause(); self.paused = False
+
     def next_track(self):
         if not self.tracks: return
         self.cur = (self.cur + 1) % len(self.tracks); self.play()
+
     def prev_track(self):
         if not self.tracks: return
         self.cur = (self.cur - 1) % len(self.tracks); self.play()
+
     def handle(self, ev):
         if self.playing and not self.paused and not pygame.mixer.music.get_busy():
             self.next_track()
@@ -452,6 +481,7 @@ class Media:
             elif ev.key == pygame.K_x:       self.stop()
             elif ev.key == pygame.K_ESCAPE:  self.stop(); return "back", None
         return None, None
+
     def draw(self):
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "MEDIA")
@@ -488,11 +518,14 @@ class Media:
             s.blit(ei, (SCREEN_W - ei.get_width() - 8, y + (item_h - ei.get_height()) // 2))
         draw_hints(s, self.fonts, [("Z/Enter", "PLAY/PAUSE"), ("\u2190/\u2192", "PREV/NEXT"), ("X", "STOP"), ("Esc", "BACK")])
 
+
 class Settings:
     OPTS = [("WiFi", None), ("Brightness", None), ("Volume", None),
             ("About", VERSION), ("Shutdown", None), ("Back", None)]
+
     def __init__(self, screen, fonts):
         self.screen = screen; self.fonts = fonts; self.cur = 0; self.volume = 80
+
     def handle(self, ev):
         if ev.type == pygame.KEYDOWN:
             if ev.key in (pygame.K_DOWN, pygame.K_s):   self.cur = (self.cur + 1) % len(self.OPTS)
@@ -510,6 +543,7 @@ class Settings:
                 if label == "Back": return "back", None
             elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
         return None, None
+
     def draw(self):
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "SETTINGS")
@@ -530,6 +564,7 @@ class Settings:
             elif sub:
                 s.blit(self.fonts["sm"].render(str(sub), True, DIM), (32, y + 28))
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("\u2190/\u2192", "ADJUST"), ("X/Esc", "BACK")])
+
 
 # --- Main ---
 def main():
@@ -558,7 +593,6 @@ def main():
     menu.ota = ota
     ota.start_check()  # non-blocking background check
     state   = "boot"; active = boot
-
     while True:
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
@@ -580,5 +614,6 @@ def main():
         else: active.draw()
         pygame.display.flip()
         clock.tick(FPS)
+
 
 if __name__ == "__main__": main()

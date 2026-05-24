@@ -25,7 +25,8 @@ echo "==> Configuring hostname & users"
 echo "pocketmint" > "$ROOTFS/etc/hostname"
 chroot "$ROOTFS" useradd -m -s /bin/bash mintkit
 echo "mintkit:mintkit" | chroot "$ROOTFS" chpasswd
-echo "mintkit ALL=(ALL) NOPASSWD:ALL" >> "$ROOTFS/etc/sudoers.d/mintkit"
+mkdir -p "$ROOTFS/etc/sudoers.d"
+echo "mintkit ALL=(ALL) NOPASSWD: ALL" > "$ROOTFS/etc/sudoers.d/mintkit"
 echo "==> Serial console (serial0 / ttyAMA0)"
 chroot "$ROOTFS" systemctl enable serial-getty@ttyAMA0.service
 echo "==> Copying launcher"
