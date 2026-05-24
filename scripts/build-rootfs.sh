@@ -8,8 +8,9 @@ LAUNCHER_SRC="$SCRIPT_DIR/rootfs/launcher/mintos.py"
 GAME_SRC="$SCRIPT_DIR/rootfs/games"
 mkdir -p "$ROOTFS"
 echo "==> Bootstrapping Debian (bookworm) for arm64"
-debootstrap --arch=arm64 --foreign bookworm "$ROOTFS" \
-  http://deb.debian.org/debian
+debootstrap --arch=arm64 --foreign \
+  --components=main,contrib,non-free,non-free-firmware \
+  bookworm "$ROOTFS" http://deb.debian.org/debian
 cp /usr/bin/qemu-aarch64-static "$ROOTFS/usr/bin/"
 chroot "$ROOTFS" /debootstrap/debootstrap --second-stage
 echo "==> Installing packages"
