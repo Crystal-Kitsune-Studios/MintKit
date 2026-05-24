@@ -5,14 +5,6 @@
 set -e
 
 VERSION="${1:?Usage: $0 <version>  e.g. $0 1.0.0}"
-
-# GitHub token — required for gh release. Set GH_TOKEN in your environment:
-#   export GH_TOKEN="ghp_xxxxxxxxxxxx"
-# Or store it in ~/.config/mintkit/secrets and source it:
-#   source ~/.config/mintkit/secrets
-: "${GH_TOKEN:?GH_TOKEN is not set. Export it before running: export GH_TOKEN=ghp_xxx}"
-export GH_TOKEN   # ensure child processes (gh, git) inherit it
-
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
 IMG_NAME="mintkit-pizero2w-v$VERSION.img"
@@ -126,9 +118,7 @@ echo "    Magnet: $MAGNET"
 echo ""
 echo "==> Patching download.html..."
 DOWNLOAD_HTML="/var/www/pocketmint/download.html"
-# <title> tag
-sed -i "s|<title>Download MintKit v[0-9.]\+|<title>Download MintKit v$VERSION|" "$DOWNLOAD_HTML"
-# Subtitle line
+# Version + date subtitle
 sed -i "s/v[0-9]\+\.[0-9]\+\.[0-9]\+ &mdash; Raspberry Pi Zero 2 W &mdash; [^<]*/v$VERSION \&mdash; Raspberry Pi Zero 2 W \&mdash; $REL_DATE/" "$DOWNLOAD_HTML"
 # Download link filenames
 sed -i "s|download/v[0-9.]\+/mintkit|download/v$VERSION/mintkit|g" "$DOWNLOAD_HTML"
@@ -141,8 +131,6 @@ sed -i "s|<span class=\"checksum-val\">[a-f0-9]\{32\}</span>|<span class=\"check
 # Magnet link
 ESCAPED_MAGNET=$(printf '%s\n' "$MAGNET" | sed 's/[[\.*^$()+?{|]/\\&/g')
 sed -i "s|href=\"magnet:?[^\"]*\"|href=\"$ESCAPED_MAGNET\"|" "$DOWNLOAD_HTML"
-# Footer version
-sed -i "s|MintKit is open source under MIT\. v[0-9.]\+|MintKit is open source under MIT. v$VERSION|" "$DOWNLOAD_HTML"
 echo "    download.html patched"
 
 # ── 8. Update index.html (Download button version) ───────────────────────────
