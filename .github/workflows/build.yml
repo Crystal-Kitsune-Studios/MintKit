@@ -57,6 +57,7 @@ jobs:
 
       - name: Compress + checksum
         run: |
+          sudo chown -R $USER:$USER dist/
           cd dist
           xz -T0 -9 mintkit-pizero2w.img
           sha256sum mintkit-pizero2w.img.xz > mintkit-pizero2w.img.xz.sha256
