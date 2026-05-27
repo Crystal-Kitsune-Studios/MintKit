@@ -78,43 +78,37 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/')"
         uses: actions/upload-artifact@v4
         with:
-          name: mintkit-pizero2w-$ github.sha 
+          name: mintkit-pizero2w-$ github.sha   # in real YAML: $ github.sha 
           path: dist/
           retention-days: 14
 
       - name: Generate release notes
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -n "$LAST_TAG" ]; then
-            COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s" --no-merges)
-          else
-            COMMITS=$(git log --pretty=format:"- %s" --no-merges | head -40)
-          fi
-          REL_DATE=$(date '+%-d %B %Y')
           IMG_NAME="mintkit-pizero2w-v${VERSION}.img.xz"
-          cat > release_notes.md <<EOF
-          ## MintKit v${VERSION}
-
-          **Released:** ${REL_DATE}
-
-          ### What's Changed
-          ${COMMITS}
-
-          ### Install
-          Flash \`${IMG_NAME}\` to a microSD card using Raspberry Pi Imager or \`dd\`.
-          See the [download page](https://pocketmint.crystal-kitsune-studios.com/download) for full instructions.
-
-          ### Checksums
-          \`\`\`<br>          $(cat dist/${IMG_NAME}.sha256)<br>          $(cat dist/${IMG_NAME}.md5)<br>          \`\`\`
-          EOF
+          SHA256=$(awk '{print $1}' dist/${IMG_NAME}.sha256)
+          MD5=$(awk '{print $1}' dist/${IMG_NAME}.md5)
+          {
+            echo ""
+            echo "### Install"
+            echo "Flash \`${IMG_NAME}\` to a microSD card using Raspberry Pi Imager or \`dd\`."
+            echo "See the [download page](https://pocketmint.crystal-kitsune-studios.com/download) for full instructions."
+            echo ""
+            echo "### Checksums"
+            echo "SHA256: ${SHA256}"
+            echo "MD5:    ${MD5}"
+          } > custom_footer.md
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: "MintKit v$ env.VERSION "
-          body_path: release_notes.md
+          # ⚠️ Notion strips   — in your real YAML file these two lines must use $  syntax:
+          # name: "MintKit $ github.ref_name "
+          # prerelease: $ contains(github.ref_name, '-rc') 
+          name: "MintKit $ github.ref_name "
+          generate_release_notes: true
+          body_path: custom_footer.md
           files: dist/*
           draft: false
           prerelease: $ contains(github.ref_name, '-rc') 
