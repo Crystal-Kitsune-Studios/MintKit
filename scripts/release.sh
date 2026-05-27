@@ -213,7 +213,41 @@ print(f"  pocketmall.html: {total} apps, {devs} devs, {free} free.")
 PYEOF
 echo "    pocketmall.html patched"
 
-# ── 10. Commit + tag + push ───────────────────────────────────────────────────
+# ── 10. Auto-generate release notes ─────────────────────────────────────────
+echo ""
+echo "==> Generating release notes..."
+LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+if [ -n "$LAST_TAG" ]; then
+  echo "    Changes since $LAST_TAG:"
+  COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s" --no-merges)
+else
+  echo "    No previous tag found — using full history."
+  COMMITS=$(git log --pretty=format:"- %s" --no-merges | head -40)
+fi
+
+RELEASE_BODY="## MintKit v$VERSION
+
+**Released:** $REL_DATE
+**SHA256:** \`$SHA256\`
+**MD5:** \`$MD5\`
+**Magnet:** \`$MAGNET\`
+
+### What's Changed
+${COMMITS}
+
+### Install
+Flash \`$IMG_XZ\` to a microSD card using Raspberry Pi Imager or \`dd\`.
+See the [download page](https://pocketmint.crystal-kitsune-studios.com/download.html) for full instructions.
+
+### Checksums
+\`\`\`<br>SHA256: $SHA256<br>MD5:    $MD5<br>\`\`\`"
+
+# Write to CHANGELOG.md (append)
+CHANGELOG="$ROOT/CHANGELOG.md"
+echo -e "# v$VERSION ($REL_DATE)\n\n$COMMITS\n" | cat - "$CHANGELOG" > /tmp/cl_tmp && mv /tmp/cl_tmp "$CHANGELOG" 2>/dev/null || echo -e "# v$VERSION ($REL_DATE)\n\n$COMMITS" > "$CHANGELOG"
+echo "    CHANGELOG.md updated."
+
+# ── 11. Commit + tag + push ───────────────────────────────────────────────────
 echo ""
 echo "==> Committing release..."
 cd "$ROOT"

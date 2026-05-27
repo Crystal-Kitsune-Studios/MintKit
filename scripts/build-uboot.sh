@@ -39,19 +39,30 @@ done
 
 cp -r "$FIRMWARE_DIR/"* "$OUT/"
 
+# Generate config.txt — Waveshare 4" HDMI IPS 800x480 display
+# NOTE: framebuffer_width=256/height=240 causes display hang on this display.
+# Must force HDMI hotplug + set CVT mode for 800x480 @ 60Hz.
 cat > "$OUT/config.txt" <<'EOF'
 arm_64bit=1
 kernel=kernel8.img
 gpu_mem=64
 dtoverlay=miniuart-bt
 enable_uart=1
+
+# Waveshare 4" HDMI IPS 800x480 — required or display hangs on color splash
+hdmi_force_hotplug=1
+hdmi_drive=2
+hdmi_group=2
+hdmi_mode=87
+hdmi_cvt=800 480 60 6 0 0 0
+framebuffer_width=800
+framebuffer_height=480
 disable_overscan=1
-framebuffer_width=256
-framebuffer_height=240
 EOF
 
+# Generate cmdline.txt — removed 'quiet' so boot errors are visible
 cat > "$OUT/cmdline.txt" <<'EOF'
-console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet
+console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait
 EOF
 
 echo "==> Pi Zero 2 W firmware ready: $OUT"
