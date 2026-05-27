@@ -55,12 +55,24 @@ jobs:
       - name: Assemble image
         run: sudo -E bash scripts/build-image.sh
 
+      - name: Extract version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
       - name: Compress + checksum
         run: |
           sudo chown -R $USER:$USER dist/
           cd dist
-          xz -T0 -9 mintkit-pizero2w.img
-          sha256sum mintkit-pizero2w.img.xz > mintkit-pizero2w.img.xz.sha256
+          # Rename to versioned filename on tag builds; plain name on branch builds
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            mv mintkit-pizero2w.img mintkit-pizero2w-v${VERSION}.img
+            IMG=mintkit-pizero2w-v${VERSION}.img
+          else
+            IMG=mintkit-pizero2w.img
+          fi
+          xz -T0 -9 "$IMG"
+          sha256sum "${IMG}.xz" > "${IMG}.xz.sha256"
+          md5sum    "${IMG}.xz" > "${IMG}.xz.md5"
 
       - name: Upload artifact
         if: "!startsWith(github.ref, 'refs/tags/')"
@@ -70,17 +82,39 @@ jobs:
           path: dist/
           retention-days: 14
 
+      - name: Generate release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s" --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges | head -40)
+          fi
+          REL_DATE=$(date '+%-d %B %Y')
+          IMG_NAME="mintkit-pizero2w-v${VERSION}.img.xz"
+          cat > release_notes.md <<EOF
+          ## MintKit v${VERSION}
+
+          **Released:** ${REL_DATE}
+
+          ### What's Changed
+          ${COMMITS}
+
+          ### Install
+          Flash \`${IMG_NAME}\` to a microSD card using Raspberry Pi Imager or \`dd\`.
+          See the [download page](https://pocketmint.crystal-kitsune-studios.com/download) for full instructions.
+
+          ### Checksums
+          \`\`\`<br>          $(cat dist/${IMG_NAME}.sha256)<br>          $(cat dist/${IMG_NAME}.md5)<br>          \`\`\`
+          EOF
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: MintKit $ github.ref_name 
-          body: |
-            ## Installation
-            1. Download `mintkit-pizero2w.img.xz`
-            2. Flash with [Balena Etcher](https://etcher.balena.io/)
-            3. Insert SD card into Pi Zero 2 W, power on
-            4. Default login: `mintkit` / `mintkit`
+          name: "MintKit v$ env.VERSION "
+          body_path: release_notes.md
           files: dist/*
           draft: false
           prerelease: $ contains(github.ref_name, '-rc') 
