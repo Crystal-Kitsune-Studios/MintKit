@@ -68,31 +68,28 @@ iface wlan0 inet dhcp
     wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
 EOF
 
-echo "==> Writing wpa_supplicant.conf (baked-in WiFi)"
-mkdir -p "$ROOTFS/etc/wpa_supplicant"
-cat > "$ROOTFS/etc/wpa_supplicant/wpa_supplicant.conf" <<'EOF'
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-update_config=1
-country=US
-
-network={
-    ssid="The Seventh House"
-    psk="z4GQ-76&A-h%5%"
-}
-EOF
-chmod 600 "$ROOTFS/etc/wpa_supplicant/wpa_supplicant.conf"
-
 echo "==> Masking conflicting wpa_supplicant.service"
 ln -sf /dev/null "$ROOTFS/etc/systemd/system/wpa_supplicant.service"
 
 echo "==> Fetching Pi Zero 2W WiFi firmware (CYW43436S)"
-FWBASE="https://raw.githubusercontent.com/RPi-Distro/firmware-nonfree/bookworm/debian/config/brcm80211/brcm"
+# Try bookworm branch first, fall back to master
+FWBASE_BOOKWORM="https://raw.githubusercontent.com/RPi-Distro/firmware-nonfree/refs/heads/bookworm/debian/config/brcm80211/brcm"
+FWBASE_MASTER="https://raw.githubusercontent.com/RPi-Distro/firmware-nonfree/master/debian/config/brcm80211/brcm"
 mkdir -p "$ROOTFS/lib/firmware/brcm"
-wget -qO "$ROOTFS/lib/firmware/brcm/brcmfmac43436s-sdio.bin" \
-    "$FWBASE/brcmfmac43436s-sdio.bin"
-wget -qO "$ROOTFS/lib/firmware/brcm/brcmfmac43436s-sdio.clm_blob" \
-    "$FWBASE/brcmfmac43436s-sdio.clm_blob"
-wget -qO "$ROOTFS/lib/firmware/brcm/brcmfmac43436s-sdio.raspberrypi,model-zero-2-w.txt" \
-    "$FWBASE/brcmfmac43436s-sdio.raspberrypi,model-zero-2-w.txt"
+
+for FW in \
+    "brcmfmac43436s-sdio.bin" \
+    "brcmfmac43436s-sdio.clm_blob" \
+    "brcmfmac43436s-sdio.raspberrypi,model-zero-2-w.txt"; do
+  OUT="$ROOTFS/lib/firmware/brcm/$FW"
+  if wget -q --timeout=30 -O "$OUT" "$FWBASE_BOOKWORM/$FW" 2>/dev/null; then
+    echo "  Fetched (bookworm): $FW"
+  elif wget -q --timeout=30 -O "$OUT" "$FWBASE_MASTER/$FW" 2>/dev/null; then
+    echo "  Fetched (master): $FW"
+  else
+    echo "  WARN: could not fetch $FW — WiFi firmware may be missing" >&2
+    rm -f "$OUT"
+  fi
+done
 
 echo "==> Rootfs build complete: $ROOTFS"
