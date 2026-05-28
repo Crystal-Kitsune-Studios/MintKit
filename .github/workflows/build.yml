@@ -19,9 +19,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            .build/linux-*
             .build/rpi-firmware
-          key: mintkit-build-$ hashFiles('rootfs/config/mintkit.conf') 
+            .build/kernel8.img
+          key: rpi-kernel-stable
 
       - name: Install dependencies
         run: |
@@ -103,9 +103,14 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          # ⚠️ Notion strips   — in your real YAML file these two lines must use $  syntax:
-          # name: "MintKit $ github.ref_name "
-          # prerelease: $ contains(github.ref_name, '-rc') 
+          # ⚠️ MANUAL FIX REQUIRED when copying to GitHub:
+          # Notion cannot store double curly braces, so the lines below are broken.
+          # In your actual build.yml, change them to:
+          #
+          #   name: "MintKit $ github.ref_name "
+          #   prerelease: $ contains(github.ref_name, '-rc') 
+          #
+          # (add  and  around the expressions)
           name: "MintKit $ github.ref_name "
           generate_release_notes: true
           body_path: custom_footer.md
