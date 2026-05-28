@@ -6,6 +6,11 @@
 # v1.2.1 (28 May 2026)
 
 - release: v1.2.1
+- release: v1.2.1
+
+# v1.2.1 (28 May 2026)
+
+- release: v1.2.1
 
 # v1.2.1 (28 May 2026)
 

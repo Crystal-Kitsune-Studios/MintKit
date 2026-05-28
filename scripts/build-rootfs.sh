@@ -31,6 +31,7 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   python3 python3-pygame python3-pip \
   fbset psmisc openssh-server \
   firmware-brcm80211 wpasupplicant \
+  sudo \
   alsa-utils \
   udev systemd-sysv
 
