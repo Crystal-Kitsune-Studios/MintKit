@@ -38,7 +38,9 @@ echo "==> Configuring hostname & users"
 echo "pocketmint" > "$ROOTFS/etc/hostname"
 chroot "$ROOTFS" useradd -m -s /bin/bash mintkit
 echo "mintkit:mintkit" | chroot "$ROOTFS" chpasswd
+mkdir -p "$ROOTFS/etc/sudoers.d"
 echo "mintkit ALL=(ALL) NOPASSWD:ALL" >> "$ROOTFS/etc/sudoers.d/mintkit"
+chmod 440 "$ROOTFS/etc/sudoers.d/mintkit"
 
 echo "==> Serial console (serial0 / ttyAMA0)"
 chroot "$ROOTFS" systemctl enable serial-getty@ttyAMA0.service
@@ -65,6 +67,20 @@ auto wlan0
 iface wlan0 inet dhcp
     wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
 EOF
+
+echo "==> Writing wpa_supplicant.conf (baked-in WiFi)"
+mkdir -p "$ROOTFS/etc/wpa_supplicant"
+cat > "$ROOTFS/etc/wpa_supplicant/wpa_supplicant.conf" <<'EOF'
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=US
+
+network={
+    ssid="The Seventh House"
+    psk="z4GQ-76&A-h%5%"
+}
+EOF
+chmod 600 "$ROOTFS/etc/wpa_supplicant/wpa_supplicant.conf"
 
 echo "==> Masking conflicting wpa_supplicant.service"
 ln -sf /dev/null "$ROOTFS/etc/systemd/system/wpa_supplicant.service"
