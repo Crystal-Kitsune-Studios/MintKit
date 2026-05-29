@@ -27,9 +27,9 @@ deb http://archive.raspberrypi.com/debian/ bookworm main
 EOF
 
 echo "==> Adding Raspberry Pi apt repo"
-# Import RPi apt repo signing key
-wget -qO "$ROOTFS/etc/apt/trusted.gpg.d/raspberrypi-archive-stable.gpg" \
-  https://archive.raspberrypi.com/debian/raspberrypi.gpg.key
+# Import RPi apt repo signing key (must be dearmored — apt requires binary .gpg)
+wget -qO- https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
+  | gpg --dearmor > "$ROOTFS/etc/apt/trusted.gpg.d/raspberrypi-archive-stable.gpg"
 
 # Add RPi repo to sources (after existing sources.list write below)
 

@@ -1,0 +1,10 @@
+{
+  "id": "chiptune",
+  "name": "ChipTune Player",
+  "developer": "RetroAudio",
+  "category": "media",
+  "price": 0,
+  "desc": "Play .xm/.mod/.mp3/.ogg tracker files.",
+  "version": "1.0",
+  "entry": "main.py"
+}

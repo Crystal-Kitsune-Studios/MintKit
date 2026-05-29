@@ -1,0 +1,24 @@
+[Unit]
+Description=MintKit Launcher
+After=multi-user.target
+DefaultDependencies=no
+Conflicts=rescue.service rescue.target
+
+[Service]
+Type=simple
+User=mintkit
+WorkingDirectory=/home/mintkit
+Environment=HOME=/home/mintkit
+Environment=MINTKIT_DATA=/home/mintkit/.mintkit
+ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
+Restart=on-failure
+RestartSec=3
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

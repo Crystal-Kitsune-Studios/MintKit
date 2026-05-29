@@ -1,0 +1,10 @@
+{
+  "id": "crypt-raid",
+  "name": "Crypt Raid",
+  "developer": "Crystal Kitsune Studios",
+  "category": "game",
+  "price": 0,
+  "desc": "Roguelike dungeon crawler.",
+  "version": "1.0",
+  "entry": "main.py"
+}

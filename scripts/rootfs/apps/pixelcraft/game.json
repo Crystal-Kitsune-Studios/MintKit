@@ -1,0 +1,10 @@
+{
+  "id": "pixelcraft",
+  "name": "PixelCraft",
+  "developer": "NeonByte",
+  "category": "game",
+  "price": 2.99,
+  "desc": "Pixel art building sandbox.",
+  "version": "1.0",
+  "entry": "main.py"
+}

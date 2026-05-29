@@ -1,0 +1,19 @@
+# MintKit udev rules
+# Allow mintkit user to access framebuffer, DRM, input, and sound devices
+
+# Framebuffer
+SUBSYSTEM=="graphics", KERNEL=="fb*", OWNER="mintkit", GROUP="video", MODE="0660"
+
+# DRM / KMS (needed for kmsdrm SDL backend)
+SUBSYSTEM=="drm", OWNER="mintkit", GROUP="video", MODE="0660"
+
+# Input devices (keyboard, joystick, gamepad)
+SUBSYSTEM=="input", KERNEL=="event*", OWNER="mintkit", GROUP="input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="js*",    OWNER="mintkit", GROUP="input", MODE="0660"
+
+# Sound (ALSA)
+SUBSYSTEM=="sound", OWNER="mintkit", GROUP="audio", MODE="0660"
+
+# SPI / GPIO (for future hardware add-ons)
+SUBSYSTEM=="spidev", OWNER="mintkit", GROUP="spi",   MODE="0660"
+SUBSYSTEM=="gpio",   OWNER="mintkit", GROUP="gpio",  MODE="0660"

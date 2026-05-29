@@ -1,0 +1,10 @@
+{
+  "id": "mintdocs",
+  "name": "MintDocs",
+  "developer": "CKS",
+  "category": "app",
+  "price": 0,
+  "desc": "Read markdown docs and plain-text ebooks on your PocketMint.",
+  "version": "1.0",
+  "entry": "main.py"
+}

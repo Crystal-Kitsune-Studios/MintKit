@@ -1,0 +1,10 @@
+{
+  "id": "pocketdraw",
+  "name": "PocketDraw",
+  "developer": "SketchWare",
+  "category": "app",
+  "price": 1.99,
+  "desc": "Pixel art drawing app.",
+  "version": "1.0",
+  "entry": "main.py"
+}

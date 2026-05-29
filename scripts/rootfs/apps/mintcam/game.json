@@ -1,0 +1,10 @@
+{
+  "id": "mintcam",
+  "name": "MintCam",
+  "developer": "CKS",
+  "category": "app",
+  "price": 0,
+  "desc": "Take photos and record video with your PocketMint camera module.",
+  "version": "1.0",
+  "entry": "main.py"
+}

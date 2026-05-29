@@ -1,0 +1,10 @@
+{
+  "id": "mintcalc",
+  "name": "Calculator",
+  "developer": "CKS",
+  "category": "app",
+  "price": 0,
+  "desc": "Calculator and unit converter utility.",
+  "version": "1.0",
+  "entry": "main.py"
+}

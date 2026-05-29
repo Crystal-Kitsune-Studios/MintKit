@@ -1,0 +1,10 @@
+{
+  "id": "retrocore",
+  "name": "RetroCore",
+  "developer": "OpenEmu x CKS",
+  "category": "emu",
+  "price": 0,
+  "desc": "NES/GB/GBC/GBA emulator frontend.",
+  "version": "1.0",
+  "entry": "main.py"
+}

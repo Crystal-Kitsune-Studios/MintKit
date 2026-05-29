@@ -1,0 +1,10 @@
+{
+  "id": "mintnotes",
+  "name": "MintNotes",
+  "developer": "Crystal Kitsune Studios",
+  "category": "app",
+  "price": 0,
+  "desc": "Simple note-taking app with file browser.",
+  "version": "1.0",
+  "entry": "main.py"
+}
