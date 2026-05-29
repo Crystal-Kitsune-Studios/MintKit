@@ -40,14 +40,18 @@ jobs:
           CROSS_COMPILE: aarch64-linux-gnu-
           ARCH: arm64
 
-      - name: Build kernel
-        run: sudo -E bash scripts/build-kernel.sh
+      # rootfs runs BEFORE kernel — raspberrypi-kernel apt install puts
+      # kernel8.img + /lib/modules/ into the rootfs, then build-kernel.sh
+      # copies kernel8.img to dist/boot/. This guarantees kernel + modules
+      # are always the same version (fixes missing brcmfmac WiFi driver).
+      - name: Build rootfs
+        run: sudo -E bash scripts/build-rootfs.sh
         env:
           CROSS_COMPILE: aarch64-linux-gnu-
           ARCH: arm64
 
-      - name: Build rootfs
-        run: sudo -E bash scripts/build-rootfs.sh
+      - name: Build kernel
+        run: sudo -E bash scripts/build-kernel.sh
         env:
           CROSS_COMPILE: aarch64-linux-gnu-
           ARCH: arm64
@@ -111,9 +115,10 @@ jobs:
           #   prerelease: $ contains(github.ref_name, '-rc') 
           #
           # (add  and  around the expressions)
-          name: "MintKit $ github.ref_name "
+          
+          name: "MintKit ${{github.ref_name}}"
           generate_release_notes: true
           body_path: custom_footer.md
           files: dist/*
           draft: false
-          prerelease: $ contains(github.ref_name, '-rc') 
+          prerelease: "${{contains(github.ref_name, '-rc')}}"

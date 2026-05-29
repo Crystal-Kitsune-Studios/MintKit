@@ -23,7 +23,15 @@ cat > "$ROOTFS/etc/apt/sources.list" <<'EOF'
 deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
 deb http://deb.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
 deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://archive.raspberrypi.com/debian/ bookworm main
 EOF
+
+echo "==> Adding Raspberry Pi apt repo"
+# Import RPi apt repo signing key
+wget -qO "$ROOTFS/etc/apt/trusted.gpg.d/raspberrypi-archive-stable.gpg" \
+  https://archive.raspberrypi.com/debian/raspberrypi.gpg.key
+
+# Add RPi repo to sources (after existing sources.list write below)
 
 echo "==> Installing packages"
 chroot "$ROOTFS" apt-get update -qq
@@ -33,7 +41,8 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   firmware-brcm80211 wpasupplicant \
   sudo \
   alsa-utils \
-  udev systemd-sysv
+  udev systemd-sysv \
+  raspberrypi-kernel
 
 echo "==> Configuring hostname & users"
 echo "pocketmint" > "$ROOTFS/etc/hostname"
