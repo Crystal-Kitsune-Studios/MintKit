@@ -29,6 +29,7 @@ from launcher         import mintshell
 from launcher         import screenshot    as sc
 from launcher         import savestates
 from launcher         import sideload
+from launcher         import mintcalc
 
 # --- Paths ---
 if IS_LINUX:
@@ -89,6 +90,7 @@ BUILTIN_CATALOG = [
     {"id": "retrocore",       "name": "RetroCore",         "developer": "OpenEmu CKS","category": "emu",  "price": 0,    "desc": "NES/GB/GBC/GBA emulator."},
     {"id": "pocketdraw",      "name": "PocketDraw",        "developer": "SketchWare", "category": "app",  "price": 1.99, "desc": "Pixel art drawing app."},
     {"id": "mintnotes",       "name": "MintNotes",         "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Simple note-taking app."},
+    {"id": "mintcalc",        "name": "MintCalc",          "developer": "CKS",        "category": "app",  "price": 0,    "desc": "Built-in calculator with basic and scientific modes."},
 ]
 
 
@@ -696,14 +698,12 @@ def main():
             if state == "menu":
                 # ── Settings — Tab key ───────────────────────────────────────
                 if ev.type == pygame.KEYDOWN and ev.key == pygame.K_TAB:
-                    from launcher import settings as settings_mod
-                    settings_mod.run(screen, clock)
+                    settings_ui.run(screen, clock)
                     _refresh_palette()
                     continue
                 # ── MintShell — Backtick key ────────────────────────────────
                 if ev.type == pygame.KEYDOWN and ev.key == pygame.K_BACKQUOTE:
                     achievements.unlock("mintshell_opened")
-                    from launcher import mintshell
                     mintshell.run(screen, clock)
                     continue
                 # ── Desktop Mode — Home key ──────────────────────────────────
@@ -723,7 +723,10 @@ def main():
                         _refresh_palette()  # theme may have changed
                         continue  # stay on menu state
                     elif data == "MEDIA":    media.tracks = scan_media(); media.cur = 0;   state = "media";   active = media
-                    elif data == "SETTINGS":  state = "settings"; active = setts
+                    elif data == "SETTINGS":
+                        settings_ui.run(screen, clock)
+                        _refresh_palette()
+                        continue
 
             elif state in ("library", "mall", "friends", "media", "settings"):
                 # ── Split-screen overlay — I+II held in Library ──────────────
@@ -745,7 +748,7 @@ def main():
 
         # ── Sleep timer tick (runs every frame) ─────────────────────────────
         if state != "boot":
-            sleep_state = sleep_timer.tick()
+            sleep_state = sleep_timer.tick(screen, clock)
             if sleep_state == "shutdown":
                 if IS_LINUX: os.system("sudo poweroff")
                 else: pygame.quit(); sys.exit()
@@ -756,7 +759,7 @@ def main():
         else:
             active.draw()
             # ── Sleep warning overlay (drawn on top of current screen) ───────
-            if state != "boot" and sleep_timer.tick() == "warn":
+            if state != "boot" and sleep_timer.tick(screen, clock) == "warn":
                 sleep_timer.draw_warning(screen, fonts["menu"], fonts["sm"])
 
         # ── Screenshot ring buffer (every frame) ─────────────────────────────

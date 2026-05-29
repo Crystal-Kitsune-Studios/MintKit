@@ -52,3 +52,16 @@ def color(info: dict | None, p: dict) -> tuple:
     if pct >= 50: return (60, 200, 90)    # green
     if pct >= 20: return (240, 180, 40)   # yellow
     return (220, 60, 60)                  # red
+
+
+def draw_bar(surf, font, x: int, y: int) -> None:
+    """Draw battery icon + % into surf at (x, y). Safe no-op if no battery."""
+    import pygame
+    from launcher import themes as _th
+    info = get()
+    if info is None:
+        return
+    p   = _th.get()
+    col = color(info, p)
+    img = font.render(f"{icon(info)} {info['pct']}%", True, col)
+    surf.blit(img, (x, y))

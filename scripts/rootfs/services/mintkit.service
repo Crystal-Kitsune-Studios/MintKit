@@ -1,20 +1,19 @@
 [Unit]
-Description=MintKit OS Launcher
-After=systemd-user-sessions.service sound.target
-Wants=sound.target
+Description=MintKit Launcher
+After=multi-user.target
 
 [Service]
+Type=simple
 User=mintkit
-Group=mintkit
 WorkingDirectory=/home/mintkit
-EnvironmentFile=/etc/environment
-Environment="SDL_VIDEODRIVER=kmsdrm"
-Environment="SDL_AUDIODRIVER=alsa"
-Environment="HOME=/home/mintkit"
-ExecStartPre=/bin/sleep 1
-ExecStart=/usr/bin/python3 /home/mintkit/mintos.py
-Restart=always
+ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
+Restart=on-failure
 RestartSec=3
+Environment=SDL_VIDEODRIVER=fbcon
+Environment=SDL_FBDEV=/dev/fb0
+Environment=PYTHONPATH=/home/mintkit
+StandardInput=tty
+TTYPath=/dev/tty1
 StandardOutput=journal
 StandardError=journal
 

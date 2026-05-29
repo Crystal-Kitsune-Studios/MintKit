@@ -267,7 +267,6 @@ def run(screen, clock):
 
                 if tab == 0:   # Theme
                     if event.key in (pygame.K_UP, pygame.K_w):
-                        nonlocal theme_cur, preview_pal
                         theme_cur = (theme_cur-1) % len(all_themes)
                         preview_pal = all_themes[theme_cur][1]
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
@@ -280,7 +279,6 @@ def run(screen, clock):
                     if wifi_input_mode:
                         if event.key == pygame.K_TAB:   wifi_input_field ^= 1
                         elif event.key == pygame.K_RETURN:
-                            nonlocal wifi_status
                             wifi_status = connect_wifi(wifi_input_ssid, wifi_input_pass)
                             wifi_input_mode = False
                         elif event.key == pygame.K_ESCAPE: wifi_input_mode = False
@@ -308,7 +306,6 @@ def run(screen, clock):
                 elif tab == 2:  # Display
                     step = max(1, display_max // 16)
                     if event.key in (pygame.K_UP, pygame.K_w):
-                        nonlocal display_brightness
                         display_brightness = min(display_max, display_brightness+step)
                         set_brightness(display_brightness)
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
@@ -317,7 +314,6 @@ def run(screen, clock):
 
                 elif tab == 3:  # Sound
                     if event.key in (pygame.K_UP, pygame.K_w):
-                        nonlocal sound_volume
                         sound_volume = min(100, sound_volume+5)
                         set_volume(sound_volume)
                     elif event.key in (pygame.K_DOWN, pygame.K_s):

@@ -34,6 +34,10 @@ wget -qO- https://archive.raspberrypi.com/debian/raspberrypi.gpg.key \
 # Add RPi repo to sources (after existing sources.list write below)
 
 echo "==> Installing packages"
+# --allow-unauthenticated on first update: keyring not fully set up yet post-debootstrap
+chroot "$ROOTFS" apt-get update -qq --allow-unauthenticated
+chroot "$ROOTFS" apt-get install -y --allow-unauthenticated --no-install-recommends debian-archive-keyring
+# Now re-update with proper keyring in place
 chroot "$ROOTFS" apt-get update -qq
 chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   python3 python3-pygame python3-pip \
@@ -42,10 +46,17 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   sudo \
   alsa-utils \
   udev systemd-sysv \
+  ca-certificates \
+  ntp \
   raspberrypi-kernel
+
+echo "==> Configuring git SSL cert path"
+git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
 
 echo "==> Configuring hostname & users"
 echo "pocketmint" > "$ROOTFS/etc/hostname"
+# Fix 'unable to resolve host pocketmint' sudo warning
+echo "127.0.1.1 pocketmint" >> "$ROOTFS/etc/hosts"
 chroot "$ROOTFS" useradd -m -s /bin/bash mintkit
 echo "mintkit:mintkit" | chroot "$ROOTFS" chpasswd
 mkdir -p "$ROOTFS/etc/sudoers.d"
@@ -56,7 +67,14 @@ echo "==> Serial console (serial0 / ttyAMA0)"
 chroot "$ROOTFS" systemctl enable serial-getty@ttyAMA0.service
 
 echo "==> Copying launcher"
-install -Dm755 "$LAUNCHER_SRC" "$ROOTFS/home/mintkit/mintos.py"
+# Copy launcher package to /home/mintkit/launcher/
+# mintos.py uses 'from launcher.X import ...' so WorkingDirectory must be /home/mintkit
+cp -r "$SCRIPT_DIR/rootfs/launcher" "$ROOTFS/home/mintkit/launcher"
+# Ensure package is importable
+touch "$ROOTFS/home/mintkit/launcher/__init__.py"
+# sleep_timer.py is imported as 'launcher.sleep' — add compat symlink
+ln -sf sleep_timer.py "$ROOTFS/home/mintkit/launcher/sleep.py"
+chown -R 1000:1000 "$ROOTFS/home/mintkit/"
 
 echo "==> Copying games"
 cp -r "$GAME_SRC"/* "$ROOTFS/home/mintkit/" 2>/dev/null || true
@@ -76,6 +94,13 @@ cat > "$ROOTFS/etc/network/interfaces.d/wlan0" <<'EOF'
 auto wlan0
 iface wlan0 inet dhcp
     wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+EOF
+
+# Auto-bring-up USB ethernet adapters (hotplug, DHCP)
+# Covers enx* adapters (USB OTG dongles used for dev/imaging)
+cat > "$ROOTFS/etc/network/interfaces.d/eth-usb" <<'EOF'
+allow-hotplug enx*
+iface enx* inet dhcp
 EOF
 
 echo "==> Masking conflicting wpa_supplicant.service"
@@ -101,5 +126,12 @@ for FW in \
     rm -f "$OUT"
   fi
 done
+
+echo "==> Creating swapfile (512M) — prevents OOM kills + read-only fs on unclean shutdown"
+dd if=/dev/zero of="$ROOTFS/swapfile" bs=1M count=512 status=none
+chmod 600 "$ROOTFS/swapfile"
+chroot "$ROOTFS" mkswap /swapfile
+echo '/swapfile none swap sw 0 0' >> "$ROOTFS/etc/fstab"
+echo "    Swapfile created and added to fstab."
 
 echo "==> Rootfs build complete: $ROOTFS"
