@@ -9,11 +9,10 @@ WorkingDirectory=/home/mintkit
 ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
 Restart=on-failure
 RestartSec=3
-Environment=SDL_VIDEODRIVER=fbcon
-Environment=SDL_FBDEV=/dev/fb0
+# KMS/DRM display — requires vc4-fkms-v3d overlay + raspberrypi-kernel (provides /dev/dri/card0)
+Environment=SDL_VIDEODRIVER=kmsdrm
 Environment=PYTHONPATH=/home/mintkit
-StandardInput=tty
-TTYPath=/dev/tty1
+StandardInput=null
 StandardOutput=journal
 StandardError=journal
 

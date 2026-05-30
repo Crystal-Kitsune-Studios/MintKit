@@ -57,7 +57,7 @@ echo "==> Configuring hostname & users"
 echo "pocketmint" > "$ROOTFS/etc/hostname"
 # Fix 'unable to resolve host pocketmint' sudo warning
 echo "127.0.1.1 pocketmint" >> "$ROOTFS/etc/hosts"
-chroot "$ROOTFS" useradd -m -s /bin/bash mintkit
+chroot "$ROOTFS" useradd -m -s /bin/bash -G video,audio,input mintkit
 echo "mintkit:mintkit" | chroot "$ROOTFS" chpasswd
 mkdir -p "$ROOTFS/etc/sudoers.d"
 echo "mintkit ALL=(ALL) NOPASSWD:ALL" >> "$ROOTFS/etc/sudoers.d/mintkit"
@@ -80,29 +80,45 @@ echo "==> Copying games"
 cp -r "$GAME_SRC"/* "$ROOTFS/home/mintkit/" 2>/dev/null || true
 
 echo "==> Installing systemd service"
+if [ ! -f "$SCRIPT_DIR/rootfs/etc/systemd/system/mintkit.service" ]; then
+  echo "ERROR: rootfs/etc/systemd/system/mintkit.service not found in repo!"
+  exit 1
+fi
 install -Dm644 "$SCRIPT_DIR/rootfs/etc/systemd/system/mintkit.service" \
   "$ROOTFS/etc/systemd/system/mintkit.service"
 chroot "$ROOTFS" systemctl enable mintkit.service
+echo "    mintkit.service installed and enabled."
 
 echo "==> Installing udev rules"
 install -Dm644 "$SCRIPT_DIR/rootfs/etc/udev/rules.d/99-mintkit.rules" \
   "$ROOTFS/etc/udev/rules.d/99-mintkit.rules"
 
-echo "==> Configuring wlan0 (ifupdown)"
-mkdir -p "$ROOTFS/etc/network/interfaces.d"
-cat > "$ROOTFS/etc/network/interfaces.d/wlan0" <<'EOF'
-auto wlan0
-iface wlan0 inet dhcp
-    wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+echo "==> Writing wpa_supplicant.conf placeholder"
+# Credentials are NOT baked in — launcher WiFi UI writes them on first use.
+# This file must exist and be valid for wpa_supplicant to start without erroring.
+mkdir -p "$ROOTFS/etc/wpa_supplicant"
+cat > "$ROOTFS/etc/wpa_supplicant/wpa_supplicant.conf" <<'EOF'
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=US
 EOF
+chmod 600 "$ROOTFS/etc/wpa_supplicant/wpa_supplicant.conf"
 
-# Auto-bring-up USB ethernet adapters (hotplug, DHCP)
-# Covers enx* adapters (USB OTG dongles used for dev/imaging)
-cat > "$ROOTFS/etc/network/interfaces.d/eth-usb" <<'EOF'
-allow-hotplug enx*
-iface enx* inet dhcp
-EOF
+echo "==> Network: ethernet via systemd-networkd, WiFi managed by launcher UI"
+# USB ethernet (enx*) auto-configured by systemd-networkd.
+# WiFi (wlan0) managed by the launcher WiFi/Network Settings UI — no baked-in creds.
+mkdir -p "$ROOTFS/etc/systemd/network"
+cat > "$ROOTFS/etc/systemd/network/10-eth-usb.network" <<'NETEOF'
+[Match]
+Name=enx*
 
+[Network]
+DHCP=yes
+NETEOF
+chroot "$ROOTFS" systemctl enable systemd-networkd
+echo "    systemd-networkd enabled for ethernet (enx*)."
+
+# wpa_supplicant.service is masked so systemd doesn't fight the launcher.
 echo "==> Masking conflicting wpa_supplicant.service"
 ln -sf /dev/null "$ROOTFS/etc/systemd/system/wpa_supplicant.service"
 
@@ -127,11 +143,40 @@ for FW in \
   fi
 done
 
+echo "==> Adding first-boot partition expand service"
+cat > "$ROOTFS/etc/systemd/system/mintkit-expand.service" <<'EOF'
+[Unit]
+Description=Expand root partition on first boot
+ConditionPathExists=/etc/mintkit-expand-pending
+After=local-fs.target
+Before=mintkit.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/raspi-config --expand-rootfs
+ExecStartPost=/bin/rm -f /etc/mintkit-expand-pending
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+touch "$ROOTFS/etc/mintkit-expand-pending"
+chroot "$ROOTFS" systemctl enable mintkit-expand.service
+echo "    First-boot expand service installed."
+
+echo "==> Writing /etc/fstab"
+# errors=continue prevents the kernel from remounting ro on any fsck issue at boot
+cat > "$ROOTFS/etc/fstab" <<'EOF'
+/dev/mmcblk0p1  /boot  vfat  defaults          0  2
+/dev/mmcblk0p2  /      ext4  defaults,noatime,errors=continue  0  1
+/swapfile        none   swap  sw                0  0
+EOF
+echo "    fstab written."
+
 echo "==> Creating swapfile (512M) — prevents OOM kills + read-only fs on unclean shutdown"
 dd if=/dev/zero of="$ROOTFS/swapfile" bs=1M count=512 status=none
 chmod 600 "$ROOTFS/swapfile"
 chroot "$ROOTFS" mkswap /swapfile
-echo '/swapfile none swap sw 0 0' >> "$ROOTFS/etc/fstab"
-echo "    Swapfile created and added to fstab."
+echo "    Swapfile created."
 
 echo "==> Rootfs build complete: $ROOTFS"

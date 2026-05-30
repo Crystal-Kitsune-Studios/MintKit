@@ -26,6 +26,7 @@ FIRMWARE_FILES=(
   "bcm2710-rpi-zero-2.dtb"
   "overlays/miniuart-bt.dtbo"
   "overlays/disable-bt.dtbo"
+  "overlays/vc4-fkms-v3d.dtbo"
 )
 
 for f in "${FIRMWARE_FILES[@]}"; do
@@ -58,6 +59,9 @@ hdmi_cvt=800 480 60 6 0 0 0
 framebuffer_width=800
 framebuffer_height=480
 disable_overscan=1
+
+# KMS for SDL2/pygame kmsdrm display driver
+dtoverlay=vc4-fkms-v3d
 EOF
 
 # Generate cmdline.txt — removed 'quiet' so boot errors are visible
