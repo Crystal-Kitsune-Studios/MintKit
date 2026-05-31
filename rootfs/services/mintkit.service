@@ -9,15 +9,17 @@ WorkingDirectory=/home/mintkit
 ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
 Restart=on-failure
 RestartSec=3
-MemoryMax=300M
+Environment=SDL_AUDIODRIVER=dummy
+Environment=HOME=/home/mintkit
+Environment=MINTKIT_DATA=/home/mintkit/.mintkit
 Environment=SDL_VIDEODRIVER=kmsdrm
-Environment=SDL_KMSDRM_DISABLE_ASYNC_FLIP=1
-Environment=SDL_RENDER_VSYNC=1
-Environment=SDL_VIDEO_DOUBLE_BUFFER=0
 Environment=PYTHONPATH=/home/mintkit
-StandardInput=null
-StandardOutput=journal
+StandardInput=tty
+StandardOutput=tty
 StandardError=journal
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
 
 [Install]
 WantedBy=multi-user.target

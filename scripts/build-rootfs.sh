@@ -49,7 +49,9 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   ca-certificates \
   ntp \
   raspberrypi-kernel \
-  libegl1 libgles2 libgl1-mesa-dri
+  libegl1 libgles2 libgl1-mesa-dri \
+  cloud-guest-utils \
+  git
 
 echo "==> Configuring git SSL cert path"
 git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
@@ -154,7 +156,8 @@ Before=mintkit.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/raspi-config --expand-rootfs
+ExecStart=/usr/bin/growpart /dev/mmcblk0 2
+ExecStart=/usr/bin/resize2fs /dev/mmcblk0p2
 ExecStartPost=/bin/rm -f /etc/mintkit-expand-pending
 RemainAfterExit=yes
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# rootfs/launcher/mintos.py  --  MintKit OS launcher v1.2.3 "Foxfire 1-3" (OS built-ins integrated)
+# rootfs/launcher/mintos.py  --  MintKit OS launcher v1.2.8 "Foxfire" (OS built-ins integrated)
 import os, sys, json, subprocess, platform, datetime, shutil
 from pathlib import Path
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
     os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
-    os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 else:
     os.environ.setdefault("SDL_VIDEODRIVER", "windows")
     os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
@@ -47,7 +47,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 1.2.3 \"Foxfire 1-3\""
+VERSION   = "MintKit 1.2.8 \"Foxfire\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
@@ -58,7 +58,7 @@ def _get_device_id() -> str:
     import uuid; return _hl.md5(uuid.getnode().to_bytes(6, "big")).hexdigest()[:16]
 DEVICE_ID = _get_device_id()
 
-SCREEN_W, SCREEN_H = 640, 480
+SCREEN_W, SCREEN_H = 800, 480
 FPS = 60
 
 RED  = (220,  60,  60)   # fixed — not theme-able
@@ -651,7 +651,7 @@ class Settings:
 def main():
     pygame.init(); pygame.joystick.init()
     if pygame.joystick.get_count(): pygame.joystick.Joystick(0).init()
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.FULLSCREEN)
     pygame.display.set_caption("MintKit")
     clock  = pygame.time.Clock()
 
