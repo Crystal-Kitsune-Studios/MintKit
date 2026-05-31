@@ -173,8 +173,8 @@ cat > "$ROOTFS/etc/fstab" <<'EOF'
 EOF
 echo "    fstab written."
 
-echo "==> Creating swapfile (512M) — prevents OOM kills + read-only fs on unclean shutdown"
-dd if=/dev/zero of="$ROOTFS/swapfile" bs=1M count=512 status=none
+echo "==> Creating swapfile (256M) — prevents OOM kills + read-only fs on unclean shutdown"
+dd if=/dev/zero of="$ROOTFS/swapfile" bs=1M count=256 status=none
 chmod 600 "$ROOTFS/swapfile"
 chroot "$ROOTFS" mkswap /swapfile
 echo "    Swapfile created."

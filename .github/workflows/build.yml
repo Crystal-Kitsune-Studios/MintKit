@@ -115,10 +115,9 @@ jobs:
           #   prerelease: $ contains(github.ref_name, '-rc') 
           #
           # (add  and  around the expressions)
-          
           name: "MintKit ${{github.ref_name}}"
           generate_release_notes: true
           body_path: custom_footer.md
           files: dist/*
           draft: false
-          prerelease: ${{contains(github.ref_name, '-rc')}}
+          prerelease: ${{contains(github.ref_name, '-rc')}} 
