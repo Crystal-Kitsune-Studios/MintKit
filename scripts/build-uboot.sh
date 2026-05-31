@@ -26,7 +26,7 @@ FIRMWARE_FILES=(
   "bcm2710-rpi-zero-2.dtb"
   "overlays/miniuart-bt.dtbo"
   "overlays/disable-bt.dtbo"
-  "overlays/vc4-fkms-v3d.dtbo"
+  "overlays/vc4-kms-v3d.dtbo"
 )
 
 for f in "${FIRMWARE_FILES[@]}"; do
@@ -46,7 +46,7 @@ cp -r "$FIRMWARE_DIR/"* "$OUT/"
 cat > "$OUT/config.txt" <<'EOF'
 arm_64bit=1
 kernel=kernel8.img
-gpu_mem=64
+gpu_mem=128
 dtoverlay=miniuart-bt
 enable_uart=1
 
@@ -61,7 +61,8 @@ framebuffer_height=480
 disable_overscan=1
 
 # KMS for SDL2/pygame kmsdrm display driver
-dtoverlay=vc4-fkms-v3d
+# cma-256: allocate 256MB CMA for GPU — required on Pi Zero 2W for /dev/dri/ to appear
+dtoverlay=vc4-kms-v3d,cma-256
 EOF
 
 # Generate cmdline.txt — removed 'quiet' so boot errors are visible
