@@ -48,7 +48,8 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   udev systemd-sysv \
   ca-certificates \
   ntp \
-  raspberrypi-kernel
+  raspberrypi-kernel \
+  libegl1 libgles2 libgl1-mesa-dri
 
 echo "==> Configuring git SSL cert path"
 git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
