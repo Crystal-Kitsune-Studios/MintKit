@@ -1,17 +1,36 @@
 #!/usr/bin/env python3
-# rootfs/launcher/mintos.py  --  MintKit OS launcher v1.2.8 "Foxfire" (OS built-ins integrated)
+# rootfs/launcher/mintos.py  --  MintKit OS launcher v1.3.0 "Foxfire" (OS built-ins integrated)
 import os, sys, json, subprocess, platform, datetime, shutil
 from pathlib import Path
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
-    os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
+    os.environ.setdefault("SDL_VIDEODRIVER", "offscreen")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    # Hide TTY cursor bleeding onto fb0
+    try:
+        open("/sys/class/graphics/fbcon/cursor_blink", "w").write("0")
+    except Exception:
+        pass
 else:
     os.environ.setdefault("SDL_VIDEODRIVER", "windows")
     os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
 
 import pygame
+import numpy as _np
+
+# ── fb0 framebuffer display path ───────────────────────────────────────────
+# SDL_VIDEODRIVER=offscreen renders to an in-memory surface; we blit it to
+# /dev/fb0 each frame via a fast numpy RGB888→RGB565 conversion.
+# pygame.display.flip is monkey-patched so no other code needs to change.
+if IS_LINUX:
+    _fb0h = open("/dev/fb0", "wb")
+    def _fb0_flip():
+        s = pygame.display.get_surface()
+        a = pygame.surfarray.array3d(s).transpose(1, 0, 2).astype(_np.uint16)
+        rgb = ((a[:,:,0] & 0xF8) << 8) | ((a[:,:,1] & 0xFC) << 3) | (a[:,:,2] >> 3)
+        _fb0h.seek(0); _fb0h.write(rgb.astype("<u2").tobytes()); _fb0h.flush()
+    pygame.display.flip = _fb0_flip
 
 # ── OS built-in imports ────────────────────────────────────────────────────
 from launcher.splash  import show   as show_splash
@@ -47,7 +66,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 1.2.8 \"Foxfire\""
+VERSION   = "MintKit 1.3.0 \"Foxfire\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
@@ -196,6 +215,17 @@ def scan_media():
 
 
 # --- Drawing helpers ---
+def _net_label():
+    """Detect active network interface and return a short label."""
+    for iface, label in (("eth0", "ETH"), ("usb0", "ETH"), ("wlan0", "WiFi")):
+        try:
+            with open(f"/sys/class/net/{iface}/operstate") as _f:
+                if _f.read().strip() == "up":
+                    return label
+        except Exception:
+            pass
+    return "Net"
+
 def blit_c(surf, img, y):
     surf.blit(img, (SCREEN_W // 2 - img.get_width() // 2, y))
 
@@ -204,7 +234,7 @@ def draw_status_bar(surf, fonts):
     pygame.draw.rect(surf, ACCENT, (47, 10, 3, 8))
     blit_c(surf, _r(fonts, "title", "POCKETMINT", ACCENT), 4)
     now = datetime.datetime.now().strftime("%H:%M")
-    info = _r(fonts, "sm", f"WiFi  {now}", ACCENT)
+    info = _r(fonts, "sm", f"{_net_label()}  {now}", ACCENT)
     surf.blit(info, (SCREEN_W - info.get_width() - 8, 8))
     # Battery indicator (right of clock, drawn over it if no battery detected)
     draw_battery(surf, fonts["xs"], SCREEN_W - info.get_width() - 56, 8)
@@ -763,19 +793,17 @@ def main():
                     launch(data, screen, clock)  # parental gate inside launch()
 
         # ── Sleep timer tick (runs every frame) ─────────────────────────────
-        if state != "boot":
-            sleep_state = sleep_timer.tick(screen, clock)
-            if sleep_state == "shutdown":
-                if IS_LINUX: os.system("sudo poweroff")
-                else: pygame.quit(); sys.exit()
+        _sleep_state = sleep_timer.tick(screen, clock) if state != "boot" else None
+        if _sleep_state == "shutdown":
+            if IS_LINUX: os.system("sudo poweroff")
+            else: pygame.quit(); sys.exit()
 
         if state == "boot":
             if boot.update(): state = "menu"; active = menu
             boot.draw()
         else:
             active.draw()
-            # ── Sleep warning overlay (drawn on top of current screen) ───────
-            if state != "boot" and sleep_timer.tick(screen, clock) == "warn":
+            if _sleep_state == "warn":
                 sleep_timer.draw_warning(screen, fonts["menu"], fonts["sm"])
 
         # ── Screenshot ring buffer (every frame) ─────────────────────────────

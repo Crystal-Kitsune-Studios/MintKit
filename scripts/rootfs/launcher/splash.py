@@ -80,7 +80,7 @@ def _draw_default(screen, p: dict, alpha: int, fonts: dict):
 
     title = fonts["xl"].render("MintKit", True, p["accent"])
     sub   = fonts["sm"].render("PocketMint OS", True, p["dim"])
-    ver   = fonts["sm"].render("v1.0", True, p["dim"])
+    ver   = fonts["sm"].render("v1.3.0", True, p["dim"])
 
     overlay.blit(title, (SCREEN_W // 2 - title.get_width() // 2, 160))
     overlay.blit(sub,   (SCREEN_W // 2 - sub.get_width() // 2,   220))

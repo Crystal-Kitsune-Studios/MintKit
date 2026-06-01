@@ -13,6 +13,16 @@ LAUNCHER_FILES  = ["mintos.py", "updater.py"]
 def get_local_version():
     if VERSION_FILE.exists():
         return VERSION_FILE.read_text().strip()
+    # Fall back: parse VERSION constant from mintos.py so a fresh install
+    # doesn't report "0.0.0" and trigger a spurious update notification.
+    try:
+        import re
+        src = (LAUNCHER_DIR / "mintos.py").read_text()
+        m   = re.search(r'VERSION\s*=\s*"MintKit\s+([\d.]+)', src)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
     return "0.0.0"
 
 def parse_version(v):
