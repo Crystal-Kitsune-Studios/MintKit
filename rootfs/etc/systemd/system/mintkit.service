@@ -1,18 +1,19 @@
 [Unit]
 Description=MintKit Launcher
 After=multi-user.target
-DefaultDependencies=no
-Conflicts=rescue.service rescue.target
 
 [Service]
 Type=simple
 User=mintkit
 WorkingDirectory=/home/mintkit
-Environment=HOME=/home/mintkit
-Environment=MINTKIT_DATA=/home/mintkit/.mintkit
 ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
 Restart=on-failure
 RestartSec=3
+Environment=SDL_AUDIODRIVER=dummy
+Environment=HOME=/home/mintkit
+Environment=MINTKIT_DATA=/home/mintkit/.mintkit
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=PYTHONPATH=/home/mintkit
 StandardInput=tty
 StandardOutput=tty
 StandardError=journal
