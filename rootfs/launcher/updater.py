@@ -3,16 +3,27 @@
 import os, sys, json, urllib.request, hashlib, shutil, threading
 from pathlib import Path
 
-VERSION_URL     = "https://pocketmint.crystal-kitsune-studios.com/version.json"
+GITHUB_API      = "https://api.github.com/repos/Crystal-Kitsune-Studios/MintKit/releases/latest"
 LAUNCHER_BASE   = "https://pocketmint.crystal-kitsune-studios.com/launcher"
 LAUNCHER_DIR    = Path(__file__).parent
 VERSION_FILE    = Path(os.environ.get("HOME", ".")) / ".mintkit" / "version.txt"
+PENDING_FILE    = Path(os.environ.get("HOME", ".")) / ".mintkit" / "pending_update.json"
 
 LAUNCHER_FILES  = ["mintos.py", "updater.py"]
 
 def get_local_version():
     if VERSION_FILE.exists():
         return VERSION_FILE.read_text().strip()
+    # Fall back: parse VERSION constant from mintos.py so a fresh install
+    # doesn't report "0.0.0" and trigger a spurious update notification.
+    try:
+        import re
+        src = (LAUNCHER_DIR / "mintos.py").read_text()
+        m   = re.search(r'VERSION\s*=\s*"MintKit\s+([\d.]+)', src)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
     return "0.0.0"
 
 def parse_version(v):
@@ -20,13 +31,24 @@ def parse_version(v):
     except Exception: return (0, 0, 0)
 
 def fetch_remote_info():
+    """Check GitHub releases API for latest version."""
     try:
         req = urllib.request.Request(
-            VERSION_URL,
-            headers={"User-Agent": "MintKit/1.0", "Cache-Control": "no-cache"}
+            GITHUB_API,
+            headers={
+                "User-Agent": "MintKit/1.0",
+                "Accept": "application/vnd.github+json",
+                "Cache-Control": "no-cache",
+            }
         )
-        with urllib.request.urlopen(req, timeout=6) as r:
-            return json.loads(r.read())
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read())
+        tag  = data.get("tag_name", "").lstrip("v")
+        body = data.get("body", "")
+        zip_url = data.get("zipball_url", "")
+        if not tag:
+            return None
+        return {"version": tag, "body": body, "zip_url": zip_url}
     except Exception:
         return None
 
@@ -65,12 +87,17 @@ def apply_update(remote_info, on_done=None):
         on_done(ok, version)
 
 def check_for_update():
+    """Compare local version to latest GitHub release. Returns remote info dict or None."""
     remote = fetch_remote_info()
     if not remote: return None
     local    = parse_version(get_local_version())
     remote_v = parse_version(remote.get("version", "0.0.0"))
     if remote_v > local:
         return remote
+    # No update — clear any stale pending file
+    if PENDING_FILE.exists():
+        try: PENDING_FILE.unlink()
+        except Exception: pass
     return None
 
 class OtaManager:
@@ -87,6 +114,17 @@ class OtaManager:
         self._thread.start()
 
     def _check_thread(self):
+        # First check pending_update.json written by the mintkit-update timer service
+        if PENDING_FILE.exists():
+            try:
+                info = json.loads(PENDING_FILE.read_text())
+                if parse_version(info.get("version", "0")) > parse_version(get_local_version()):
+                    self.remote_info      = info
+                    self.update_available = True
+                    return
+            except Exception:
+                pass
+        # Fall back to a live GitHub check
         info = check_for_update()
         if info:
             self.remote_info      = info

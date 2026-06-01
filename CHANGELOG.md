@@ -1,3 +1,7 @@
+# v1.3.1 (1 June 2026)
+
+- release: v1.3.0
+
 # v1.3.0 (31 May 2026)
 
 - release: v1.2.8

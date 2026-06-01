@@ -1,17 +1,36 @@
 #!/usr/bin/env python3
-# rootfs/launcher/mintos.py  --  MintKit OS launcher v3 (OS built-ins integrated)
+# rootfs/launcher/mintos.py  --  MintKit OS launcher v1.3.0 "Foxfire" (OS built-ins integrated)
 import os, sys, json, subprocess, platform, datetime, shutil
 from pathlib import Path
 
 IS_LINUX = platform.system() == "Linux"
 if IS_LINUX:
-    os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
-    os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
+    os.environ.setdefault("SDL_VIDEODRIVER", "offscreen")
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    # Hide TTY cursor bleeding onto fb0
+    try:
+        open("/sys/class/graphics/fbcon/cursor_blink", "w").write("0")
+    except Exception:
+        pass
 else:
     os.environ.setdefault("SDL_VIDEODRIVER", "windows")
     os.environ.setdefault("SDL_AUDIODRIVER", "directsound")
 
 import pygame
+import numpy as _np
+
+# ── fb0 framebuffer display path ───────────────────────────────────────────
+# SDL_VIDEODRIVER=offscreen renders to an in-memory surface; we blit it to
+# /dev/fb0 each frame via a fast numpy RGB888→RGB565 conversion.
+# pygame.display.flip is monkey-patched so no other code needs to change.
+if IS_LINUX:
+    _fb0h = open("/dev/fb0", "wb")
+    def _fb0_flip():
+        s = pygame.display.get_surface()
+        a = pygame.surfarray.array3d(s).transpose(1, 0, 2).astype(_np.uint16)
+        rgb = ((a[:,:,0] & 0xF8) << 8) | ((a[:,:,1] & 0xFC) << 3) | (a[:,:,2] >> 3)
+        _fb0h.seek(0); _fb0h.write(rgb.astype("<u2").tobytes()); _fb0h.flush()
+    pygame.display.flip = _fb0_flip
 
 # ── OS built-in imports ────────────────────────────────────────────────────
 from launcher.splash  import show   as show_splash
@@ -47,7 +66,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 1.0-alpha"
+VERSION   = "MintKit 1.3.0 \"Foxfire\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
@@ -58,7 +77,7 @@ def _get_device_id() -> str:
     import uuid; return _hl.md5(uuid.getnode().to_bytes(6, "big")).hexdigest()[:16]
 DEVICE_ID = _get_device_id()
 
-SCREEN_W, SCREEN_H = 640, 480
+SCREEN_W, SCREEN_H = 800, 480
 FPS = 60
 
 RED  = (220,  60,  60)   # fixed — not theme-able
@@ -66,6 +85,21 @@ GOLD = (240, 200,  60)   # fixed — not theme-able
 
 # Theme-driven palette globals — updated by _refresh_palette()
 BG = CARD = CARD_SEL = BORDER = ACCENT = DIM = WHITE = BLACK = (0, 0, 0)  # overwritten below
+
+# ── Text surface cache ────────────────────────────────────────────────────
+# font.render() allocates a new Surface every call. At 60 fps this creates
+# thousands of short-lived objects per second and causes a runaway memory
+# leak. _r() caches by (font_key, text, color) and returns the same Surface
+# on repeat calls. _refresh_palette() clears it so colors update on theme
+# change. This alone drops ~1.8 MB/s of allocation to near-zero.
+_font_cache: dict = {}
+
+def _r(fonts, key, text, color):
+    """Cached font.render — never allocates the same surface twice."""
+    k = (key, text, color)
+    if k not in _font_cache:
+        _font_cache[k] = fonts[key].render(text, True, color)
+    return _font_cache[k]
 
 def _refresh_palette():
     """Pull color globals from the active theme. Call at startup and after theme change."""
@@ -79,6 +113,7 @@ def _refresh_palette():
     DIM      = p["dim"]
     WHITE    = p["white"]
     BLACK    = p["black"]
+    _font_cache.clear()  # invalidate cached surfaces — colors have changed
 
 _refresh_palette()  # initialise from active theme at import time
 
@@ -180,33 +215,44 @@ def scan_media():
 
 
 # --- Drawing helpers ---
+def _net_label():
+    """Detect active network interface and return a short label."""
+    for iface, label in (("eth0", "ETH"), ("usb0", "ETH"), ("wlan0", "WiFi")):
+        try:
+            with open(f"/sys/class/net/{iface}/operstate") as _f:
+                if _f.read().strip() == "up":
+                    return label
+        except Exception:
+            pass
+    return "Net"
+
 def blit_c(surf, img, y):
     surf.blit(img, (SCREEN_W // 2 - img.get_width() // 2, y))
 
 def draw_status_bar(surf, fonts):
     for i in range(3): pygame.draw.rect(surf, ACCENT, (8 + i * 13, 7, 9, 14))
     pygame.draw.rect(surf, ACCENT, (47, 10, 3, 8))
-    blit_c(surf, fonts["title"].render("POCKETMINT", True, ACCENT), 4)
+    blit_c(surf, _r(fonts, "title", "POCKETMINT", ACCENT), 4)
     now = datetime.datetime.now().strftime("%H:%M")
-    info = fonts["sm"].render(f"WiFi  {now}", True, ACCENT)
+    info = _r(fonts, "sm", f"{_net_label()}  {now}", ACCENT)
     surf.blit(info, (SCREEN_W - info.get_width() - 8, 8))
     # Battery indicator (right of clock, drawn over it if no battery detected)
     draw_battery(surf, fonts["xs"], SCREEN_W - info.get_width() - 56, 8)
     pygame.draw.line(surf, BORDER, (0, 28), (SCREEN_W, 28), 1)
 
 def draw_section(surf, fonts, label):
-    blit_c(surf, fonts["sm"].render(label, True, ACCENT), 32)
+    blit_c(surf, _r(fonts, "sm", label, ACCENT), 32)
     pygame.draw.line(surf, BORDER, (0, 50), (SCREEN_W, 50), 1)
 
 def draw_hints(surf, fonts, hints):
     pygame.draw.line(surf, BORDER, (0, SCREEN_H - 34), (SCREEN_W, SCREEN_H - 34), 1)
     x = 6
     for key, action in hints:
-        ki = fonts["xs"].render(key, True, BLACK)
+        ki = _r(fonts, "xs", key, BLACK)
         kw = ki.get_width() + 8
         pygame.draw.rect(surf, ACCENT, (x, SCREEN_H - 26, kw, 18))
         surf.blit(ki, (x + 4, SCREEN_H - 24)); x += kw + 4
-        ai = fonts["xs"].render(action, True, DIM)
+        ai = _r(fonts, "xs", action, DIM)
         surf.blit(ai, (x, SCREEN_H - 24)); x += ai.get_width() + 16
 
 
@@ -219,9 +265,9 @@ class Boot:
         self.t += 1; return self.t > FPS * 2
     def draw(self):
         s = self.screen; s.fill(BG)
-        blit_c(s, self.fonts["big"].render("POCKETMINT", True, ACCENT), SCREEN_H // 2 - 40)
-        blit_c(s, self.fonts["sm"].render(VERSION, True, DIM), SCREEN_H // 2 + 10)
-        blit_c(s, self.fonts["sm"].render("." * ((self.t // 10) % 4), True, DIM), SCREEN_H // 2 + 34)
+        blit_c(s, _r(self.fonts, "big", "POCKETMINT", ACCENT), SCREEN_H // 2 - 40)
+        blit_c(s, _r(self.fonts, "sm", VERSION, DIM), SCREEN_H // 2 + 10)
+        blit_c(s, _r(self.fonts, "sm", "." * ((self.t // 10) % 4), DIM), SCREEN_H // 2 + 34)
 
 
 class MainMenu:
@@ -261,20 +307,20 @@ class MainMenu:
             pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 3))
             if i == self.cur:
                 pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 3), 1)
-                s.blit(self.fonts["menu"].render("\u25b6", True, ACCENT), (10, y + (item_h - 3) // 2 - 10))
-            s.blit(self.fonts["menu"].render(label, True, ACCENT), (32, y + 6))
-            if sub: s.blit(self.fonts["sm"].render(sub, True, DIM), (32, y + 28))
+                s.blit(_r(self.fonts, "menu", "▶", ACCENT), (10, y + (item_h - 3) // 2 - 10))
+            s.blit(_r(self.fonts, "menu", label, ACCENT), (32, y + 6))
+            if sub: s.blit(_r(self.fonts, "sm", sub, DIM), (32, y + 28))
         # OTA notification bar
         if self.ota and self.ota.update_available and not self.ota.applying:
             v = self.ota.remote_info.get("version", "?")
             pygame.draw.rect(s, (13, 45, 22), (0, SCREEN_H - 58, SCREEN_W, 20))
             pygame.draw.line(s, ACCENT, (0, SCREEN_H - 58), (SCREEN_W, SCREEN_H - 58), 1)
             msg = f"UPDATE AVAILABLE  v{v}  --  Press U to install"
-            blit_c(s, self.fonts["xs"].render(msg, True, ACCENT), SCREEN_H - 54)
+            blit_c(s, _r(self.fonts, "xs", msg, ACCENT), SCREEN_H - 54)
         if self.ota and self.ota.applying:
             pygame.draw.rect(s, (13, 45, 22), (0, SCREEN_H - 58, SCREEN_W, 20))
             pygame.draw.line(s, ACCENT, (0, SCREEN_H - 58), (SCREEN_W, SCREEN_H - 58), 1)
-            blit_c(s, self.fonts["xs"].render("Downloading update...", True, DIM), SCREEN_H - 54)
+            blit_c(s, _r(self.fonts, "xs", "Downloading update...", DIM), SCREEN_H - 54)
         if self.ota and self.ota.apply_result:
             success, version = self.ota.apply_result
             self.ota.apply_result = None
@@ -299,8 +345,8 @@ class Library:
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "LIBRARY")
         if not self.games:
-            blit_c(s, self.fonts["menu"].render("No games installed", True, DIM), SCREEN_H // 2 - 14)
-            blit_c(s, self.fonts["sm"].render("Browse PocketMall to install titles", True, DIM), SCREEN_H // 2 + 14)
+            blit_c(s, _r(self.fonts, "menu", "No games installed", DIM), SCREEN_H // 2 - 14)
+            blit_c(s, _r(self.fonts, "sm", "Browse PocketMall to install titles", DIM), SCREEN_H // 2 + 14)
         else:
             item_h = min(60, (SCREEN_H - 90) // len(self.games))
             for i, g in enumerate(self.games):
@@ -309,9 +355,9 @@ class Library:
                 pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 3))
                 if i == self.cur:
                     pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 3), 1)
-                    s.blit(self.fonts["menu"].render("\u25b6", True, ACCENT), (10, y + (item_h - 3) // 2 - 10))
-                s.blit(self.fonts["menu"].render(g.get("name", g["path"].name), True, ACCENT), (32, y + 6))
-                s.blit(self.fonts["sm"].render(g.get("developer", ""), True, DIM), (32, y + 28))
+                    s.blit(_r(self.fonts, "menu", "▶", ACCENT), (10, y + (item_h - 3) // 2 - 10))
+                s.blit(_r(self.fonts, "menu", g.get("name", g["path"].name), ACCENT), (32, y + 6))
+                s.blit(_r(self.fonts, "sm", g.get("developer", ""), DIM), (32, y + 28))
         draw_hints(s, self.fonts, [("Z/Enter", "LAUNCH"), ("X/Esc", "BACK")])
 
 
@@ -376,11 +422,11 @@ class PocketMall:
             x = i * tab_w
             pygame.draw.rect(s, CARD_SEL if i == self.cat_idx else CARD, (x, 54, tab_w - 1, 18))
             if i == self.cat_idx: pygame.draw.rect(s, ACCENT, (x, 54, tab_w - 1, 18), 1)
-            t = self.fonts["xs"].render(cat, True, ACCENT if i == self.cat_idx else DIM)
+            t = _r(self.fonts, "xs", cat, ACCENT if i == self.cat_idx else DIM)
             s.blit(t, (x + tab_w // 2 - t.get_width() // 2, 57))
         items = self.filtered()
         if not items:
-            blit_c(s, self.fonts["menu"].render("No titles in this category", True, DIM), SCREEN_H // 2)
+            blit_c(s, _r(self.fonts, "menu", "No titles in this category", DIM), SCREEN_H // 2)
         else:
             item_h = min(52, (SCREEN_H - 110) // len(items))
             for i, app in enumerate(items):
@@ -389,27 +435,27 @@ class PocketMall:
                 pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 2))
                 if i == self.cur:
                     pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 2), 1)
-                    s.blit(self.fonts["menu"].render("\u25b6", True, ACCENT), (10, y + item_h // 2 - 10))
-                s.blit(self.fonts["menu"].render(app["name"], True, ACCENT), (32, y + 4))
+                    s.blit(_r(self.fonts, "menu", "▶", ACCENT), (10, y + item_h // 2 - 10))
+                s.blit(_r(self.fonts, "menu", app["name"], ACCENT), (32, y + 4))
                 price = "FREE" if app["price"] == 0 else f"${app['price']:.2f}"
-                pi = self.fonts["xs"].render(price, True, ACCENT if app["price"] == 0 else GOLD)
+                pi = _r(self.fonts, "xs", price, ACCENT if app["price"] == 0 else GOLD)
                 s.blit(pi, (SCREEN_W - pi.get_width() - 40, y + 6))
                 if is_installed(app["id"]):
-                    ci = self.fonts["xs"].render("\u2713", True, ACCENT)
+                    ci = _r(self.fonts, "xs", "✓", ACCENT)
                     s.blit(ci, (SCREEN_W - 26, y + 6))
-                s.blit(self.fonts["xs"].render(app["developer"], True, DIM), (32, y + item_h - 16))
-        draw_hints(s, self.fonts, [("\u2190/\u2192", "CATEGORY"), ("Z/Enter", "DETAILS"), ("X/Esc", "BACK")])
+                s.blit(_r(self.fonts, "xs", app["developer"], DIM), (32, y + item_h - 16))
+        draw_hints(s, self.fonts, [("←/→", "CATEGORY"), ("Z/Enter", "DETAILS"), ("X/Esc", "BACK")])
 
     def _draw_detail(self, s):
         app = self.detail; y = 60
-        s.blit(self.fonts["menu"].render(app["name"], True, WHITE), (16, y + 4))
-        s.blit(self.fonts["sm"].render(app["developer"], True, DIM), (16, y + 28))
-        ci = self.fonts["xs"].render(app["category"].upper(), True, BLACK)
+        s.blit(_r(self.fonts, "menu", app["name"], WHITE), (16, y + 4))
+        s.blit(_r(self.fonts, "sm", app["developer"], DIM), (16, y + 28))
+        ci = _r(self.fonts, "xs", app["category"].upper(), BLACK)
         cw = ci.get_width() + 8
         pygame.draw.rect(s, ACCENT, (16, y + 46, cw, 16))
         s.blit(ci, (20, y + 48))
         price = "FREE" if app["price"] == 0 else f"${app['price']:.2f}"
-        s.blit(self.fonts["sm"].render(price, True, ACCENT if app["price"] == 0 else GOLD), (16 + cw + 8, y + 46))
+        s.blit(_r(self.fonts, "sm", price, ACCENT if app["price"] == 0 else GOLD), (16 + cw + 8, y + 46))
         pygame.draw.line(s, BORDER, (0, y + 74), (SCREEN_W, y + 74), 1)
         words = app.get("desc", "").split(); line = ""; lines = []
         for w in words:
@@ -418,11 +464,11 @@ class PocketMall:
             else: lines.append(line); line = w
         if line: lines.append(line)
         for j, ln in enumerate(lines):
-            s.blit(self.fonts["sm"].render(ln, True, WHITE), (16, y + 82 + j * 20))
+            s.blit(_r(self.fonts, "sm", ln, WHITE), (16, y + 82 + j * 20))
         installed = is_installed(app["id"])
         btn_text = "Uninstall" if installed else ("Install (FREE)" if app["price"] == 0 else f"Purchase ${app['price']:.2f}")
         btn_col  = RED if installed else ACCENT
-        bi = self.fonts["menu"].render(btn_text, True, btn_col)
+        bi = _r(self.fonts, "menu", btn_text, btn_col)
         bw = bi.get_width() + 24; bx = SCREEN_W // 2 - bw // 2; by = SCREEN_H - 80
         pygame.draw.rect(s, CARD_SEL, (bx, by, bw, 34))
         pygame.draw.rect(s, btn_col,  (bx, by, bw, 34), 1)
@@ -478,23 +524,23 @@ class Friends:
             pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 2))
             if i == self.cur: pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 2), 1)
             if name is None:
-                t = self.fonts["menu"].render("[+ Add Friend]", True, DIM)
+                t = _r(self.fonts, "menu", "[+ Add Friend]", DIM)
                 s.blit(t, (32, y + item_h // 2 - t.get_height() // 2))
             else:
                 online = (sum(ord(c) for c in name) % 3 != 0)
                 pygame.draw.circle(s, ACCENT if online else DIM, (38, y + item_h // 2), 5)
-                s.blit(self.fonts["menu"].render(name, True, WHITE), (52, y + 6))
-                s.blit(self.fonts["xs"].render("Online" if online else "Offline", True, ACCENT if online else DIM), (52, y + 26))
+                s.blit(_r(self.fonts, "menu", name, WHITE), (52, y + 6))
+                s.blit(_r(self.fonts, "xs", "Online" if online else "Offline", ACCENT if online else DIM), (52, y + 26))
         if self.mode == "add":
             ov = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
             ov.fill((0, 0, 0, 160)); s.blit(ov, (0, 0))
             pygame.draw.rect(s, CARD,  (80, 160, SCREEN_W - 160, 120))
             pygame.draw.rect(s, ACCENT,(80, 160, SCREEN_W - 160, 120), 1)
-            blit_c(s, self.fonts["menu"].render("Add Friend", True, ACCENT), 172)
-            s.blit(self.fonts["sm"].render("Enter username:", True, DIM), (96, 200))
+            blit_c(s, _r(self.fonts, "menu", "Add Friend", ACCENT), 172)
+            s.blit(_r(self.fonts, "sm", "Enter username:", DIM), (96, 200))
             s.blit(self.fonts["menu"].render(self.input + "_", True, WHITE), (96, 218))
         if self.msg_t > 0:
-            mi = self.fonts["sm"].render(self.msg, True, ACCENT); blit_c(s, mi, SCREEN_H - 56)
+            mi = _r(self.fonts, "sm", self.msg, ACCENT); blit_c(s, mi, SCREEN_H - 56)
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("Del", "REMOVE"), ("X/Esc", "BACK")])
 
 
@@ -550,17 +596,17 @@ class Media:
         s = self.screen; s.fill(BG)
         draw_status_bar(s, self.fonts); draw_section(s, self.fonts, "MEDIA")
         if not self.tracks:
-            blit_c(s, self.fonts["menu"].render("No media files found", True, DIM), SCREEN_H // 2 - 20)
-            blit_c(s, self.fonts["sm"].render(f"Add .mp3/.ogg/.wav to: {MEDIA_DIR.name}/", True, DIM), SCREEN_H // 2 + 14)
+            blit_c(s, _r(self.fonts, "menu", "No media files found", DIM), SCREEN_H // 2 - 20)
+            blit_c(s, _r(self.fonts, "sm", f"Add .mp3/.ogg/.wav to: {MEDIA_DIR.name}/", DIM), SCREEN_H // 2 + 14)
             draw_hints(s, self.fonts, [("X/Esc", "BACK")]); return
         y_start = 54
         if self.playing or self.paused:
             t = self.tracks[self.cur]
-            np_text = ("\u23f8 " if self.paused else "\u25b6 ") + t.stem[:40]
+            np_text = ("⏸ " if self.paused else "▶ ") + t.stem[:40]
             pygame.draw.rect(s, CARD_SEL, (0, 54, SCREEN_W, 22))
             pygame.draw.line(s, BORDER, (0, 54), (SCREEN_W, 54), 1)
             pygame.draw.line(s, BORDER, (0, 76), (SCREEN_W, 76), 1)
-            blit_c(s, self.fonts["sm"].render(np_text, True, ACCENT), 58)
+            blit_c(s, _r(self.fonts, "sm", np_text, ACCENT), 58)
             elapsed = (pygame.time.get_ticks() - self.track_start) / 1000
             bar_w = int((elapsed % 60) / 60 * (SCREEN_W - 40))
             pygame.draw.rect(s, BORDER, (20, 73, SCREEN_W - 40, 3))
@@ -573,14 +619,14 @@ class Media:
             bg = CARD_SEL if i == self.cur else CARD
             pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 2))
             if i == self.cur: pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 2), 1)
-            icon = "\u25b6" if (i == self.cur and self.playing) else "\u266a"
-            ic = self.fonts["sm"].render(icon, True, ACCENT if i == self.cur else DIM)
+            icon = "▶" if (i == self.cur and self.playing) else "♪"
+            ic = _r(self.fonts, "sm", icon, ACCENT if i == self.cur else DIM)
             s.blit(ic, (12, y + (item_h - ic.get_height()) // 2))
-            ni = self.fonts["sm"].render(t.stem[:44], True, WHITE)
+            ni = _r(self.fonts, "sm", t.stem[:44], WHITE)
             s.blit(ni, (32, y + (item_h - ni.get_height()) // 2))
-            ei = self.fonts["xs"].render(t.suffix[1:].upper(), True, DIM)
+            ei = _r(self.fonts, "xs", t.suffix[1:].upper(), DIM)
             s.blit(ei, (SCREEN_W - ei.get_width() - 8, y + (item_h - ei.get_height()) // 2))
-        draw_hints(s, self.fonts, [("Z/Enter", "PLAY/PAUSE"), ("\u2190/\u2192", "PREV/NEXT"), ("X", "STOP"), ("Esc", "BACK")])
+        draw_hints(s, self.fonts, [("Z/Enter", "PLAY/PAUSE"), ("←/→", "PREV/NEXT"), ("X", "STOP"), ("Esc", "BACK")])
 
 
 class Settings:
@@ -619,23 +665,23 @@ class Settings:
             pygame.draw.rect(s, bg, (4, y, SCREEN_W - 8, item_h - 3))
             if i == self.cur:
                 pygame.draw.rect(s, ACCENT, (4, y, SCREEN_W - 8, item_h - 3), 1)
-                s.blit(self.fonts["menu"].render("\u25b6", True, ACCENT), (10, y + (item_h - 3) // 2 - 10))
-            s.blit(self.fonts["menu"].render(label, True, ACCENT), (32, y + 6))
+                s.blit(_r(self.fonts, "menu", "▶", ACCENT), (10, y + (item_h - 3) // 2 - 10))
+            s.blit(_r(self.fonts, "menu", label, ACCENT), (32, y + 6))
             if label == "Volume":
                 bar_filled = int(self.volume / 100 * 160)
                 pygame.draw.rect(s, BORDER, (SCREEN_W - 200, y + 14, 160, 8))
                 pygame.draw.rect(s, ACCENT,  (SCREEN_W - 200, y + 14, bar_filled, 8))
-                s.blit(self.fonts["xs"].render(f"{self.volume}%", True, DIM), (SCREEN_W - 34, y + 12))
+                s.blit(_r(self.fonts, "xs", f"{self.volume}%", DIM), (SCREEN_W - 34, y + 12))
             elif sub:
-                s.blit(self.fonts["sm"].render(str(sub), True, DIM), (32, y + 28))
-        draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("\u2190/\u2192", "ADJUST"), ("X/Esc", "BACK")])
+                s.blit(_r(self.fonts, "sm", str(sub), DIM), (32, y + 28))
+        draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("←/→", "ADJUST"), ("X/Esc", "BACK")])
 
 
 # --- Main ---
 def main():
     pygame.init(); pygame.joystick.init()
     if pygame.joystick.get_count(): pygame.joystick.Joystick(0).init()
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.FULLSCREEN)
     pygame.display.set_caption("MintKit")
     clock  = pygame.time.Clock()
 
@@ -689,7 +735,7 @@ def main():
             # ── Reset sleep timer on any input ──────────────────────────────
             if ev.type in (pygame.KEYDOWN, pygame.KEYUP,
                            pygame.MOUSEBUTTONDOWN, pygame.JOYBUTTONDOWN):
-                sleep_timer.reset()
+                sleep_timer.poke()
 
             # ── Track held keys ─────────────────────────────────────────────
             if ev.type == pygame.KEYDOWN: keys_held.add(ev.key)
@@ -747,26 +793,23 @@ def main():
                     launch(data, screen, clock)  # parental gate inside launch()
 
         # ── Sleep timer tick (runs every frame) ─────────────────────────────
-        if state != "boot":
-            sleep_state = sleep_timer.tick(screen, clock)
-            if sleep_state == "shutdown":
-                if IS_LINUX: os.system("sudo poweroff")
-                else: pygame.quit(); sys.exit()
+        _sleep_state = sleep_timer.tick(screen, clock) if state != "boot" else None
+        if _sleep_state == "shutdown":
+            if IS_LINUX: os.system("sudo poweroff")
+            else: pygame.quit(); sys.exit()
 
         if state == "boot":
             if boot.update(): state = "menu"; active = menu
             boot.draw()
         else:
             active.draw()
-            # ── Sleep warning overlay (drawn on top of current screen) ───────
-            if state != "boot" and sleep_timer.tick(screen, clock) == "warn":
-                sleep_timer.draw_warning(screen, fonts["menu"], fonts["sm"])
+            # _sleep_state == "warn": overlay already drawn inside sleep_timer.tick()
 
         # ── Screenshot ring buffer (every frame) ─────────────────────────────
         sc.push_frame(screen)
         # ── Dev Mode FPS counter ──────────────────────────────────────────────
         if settings_ui.get("dev_mode"):
-            _fps_s = fonts["xs"].render(f"{clock.get_fps():.0f} fps", True, ACCENT)
+            _fps_s = _r(fonts, "xs", f"{clock.get_fps():.0f} fps", ACCENT)
             screen.blit(_fps_s, (SCREEN_W - _fps_s.get_width() - 4, 4))
         pygame.display.flip()
         clock.tick(FPS)

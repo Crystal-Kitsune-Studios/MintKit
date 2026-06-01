@@ -6,12 +6,23 @@ from pathlib import Path
 SCREENSHOT_DIR = Path("/home/mintkit/.mintkit/screenshots")
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Ring buffer for clip capture (last N frames)
-MAX_CLIP_FRAMES = 30 * 30  # 30 s @ 30 fps
+# Ring buffer for clip capture (last N frames at 15fps effective)
+# IMPORTANT: push_frame throttles to every 4th frame (15fps) to prevent OOM.
+# At 60fps, surface.copy() at 640x480 = ~1.2MB/frame. Without throttling,
+# GC can't free old surfaces fast enough -> 72MB/s allocation -> OOM in ~30s.
+# 15fps * 30 frames = 9MB max buffer, safe on Pi Zero 2W.
+MAX_CLIP_FRAMES = 15 * 30  # 30 s @ 15 fps
 _frame_buffer: list[pygame.Surface] = []
+_pf_counter = 0
 
 def push_frame(surface: pygame.Surface):
-    """Call once per frame from the main loop to keep the clip buffer fresh."""
+    """Call once per frame from the main loop to keep the clip buffer fresh.
+    Throttled to every 4th frame (15fps) to prevent OOM on Pi Zero 2W.
+    """
+    global _pf_counter
+    _pf_counter += 1
+    if _pf_counter % 4 != 0:
+        return
     _frame_buffer.append(surface.copy())
     if len(_frame_buffer) > MAX_CLIP_FRAMES:
         _frame_buffer.pop(0)

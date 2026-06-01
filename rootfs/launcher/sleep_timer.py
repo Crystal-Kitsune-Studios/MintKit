@@ -36,35 +36,42 @@ class SleepTimer:
         except Exception:
             return DEFAULT_TIMEOUT
 
-    def tick(self, screen, clock) -> bool:
+    def tick(self, screen, clock) -> str | None:
         """
-        Call once per frame. Returns True if the device should sleep now.
-        Draws a countdown warning overlay when near timeout.
+        Call once per frame.
+        Returns:
+          "shutdown" -- timeout exceeded, caller should poweroff/suspend
+          "warn"     -- within WARN_SECS of timeout, warning overlay drawn
+          None       -- nothing to do
         """
         t = self.timeout()
         if t <= 0:
-            return False
+            return None
         idle = self.idle_secs()
         if idle >= t:
-            return True                  # caller should shut down / sleep
+            return "shutdown"
         if idle >= t - WARN_SECS:
             if not self._warned:
                 self._warned     = True
                 self._warn_start = time.monotonic()
             secs_left = max(0, int(t - idle))
             self._draw_warning(screen, secs_left)
-        return False
+            return "warn"
+        return None
 
     @staticmethod
     def _draw_warning(screen, secs_left: int):
         p     = th.get()
         font  = pygame.font.SysFont("monospace", 18, bold=True)
         small = pygame.font.SysFont("monospace", 12)
-        ov    = pygame.Surface((640, 480), pygame.SRCALPHA)
+        w, h  = screen.get_width(), screen.get_height()
+        ov    = pygame.Surface((w, h), pygame.SRCALPHA)
         ov.fill((0, 0, 0, 160))
         screen.blit(ov, (0, 0))
         msg = font.render(f"Sleeping in {secs_left}s...", True, p["accent"])
         sub = small.render("Press any button to cancel", True, p["dim"])
-        screen.blit(msg, (320 - msg.get_width() // 2, 210))
-        screen.blit(sub, (320 - sub.get_width() // 2, 240))
-        pygame.display.flip()
+        cx  = w // 2
+        cy  = h // 2
+        screen.blit(msg, (cx - msg.get_width() // 2, cy - 15))
+        screen.blit(sub, (cx - sub.get_width() // 2, cy + 15))
+        # do NOT call pygame.display.flip() here -- main loop handles it

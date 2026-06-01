@@ -51,7 +51,9 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   raspberrypi-kernel \
   libegl1 libgles2 libgl1-mesa-dri \
   cloud-guest-utils \
-  git
+  git \
+  bluez bluez-tools \
+  pi-bluetooth
 
 echo "==> Configuring git SSL cert path"
 git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
@@ -165,6 +167,8 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 touch "$ROOTFS/etc/mintkit-expand-pending"
+chroot "$ROOTFS" systemctl enable bluetooth.service
+echo "    bluetooth.service enabled."
 chroot "$ROOTFS" systemctl enable mintkit-expand.service
 echo "    First-boot expand service installed."
 
