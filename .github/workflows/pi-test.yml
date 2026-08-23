@@ -1,0 +1,9 @@
+name: Pi Test
+on: workflow_dispatch
+
+jobs:
+  hello:
+    runs-on: [self-hosted, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - run: uname -m && python3 --version && free -h
