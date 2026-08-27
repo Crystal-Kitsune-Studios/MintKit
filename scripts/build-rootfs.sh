@@ -53,8 +53,11 @@ chroot "$ROOTFS" apt-get install -y --no-install-recommends \
   cloud-guest-utils \
   git \
   bluez bluez-tools \
-  pi-bluetooth
-
+  pi-bluetooth \
+  nano \
+  fake-hwclock \
+  avahi-daemon libnss-mdns \
+  python3-evdev python3-numpy
 echo "==> Configuring git SSL cert path"
 git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
 
@@ -62,7 +65,11 @@ echo "==> Configuring hostname & users"
 echo "pocketmint" > "$ROOTFS/etc/hostname"
 # Fix 'unable to resolve host pocketmint' sudo warning
 echo "127.0.1.1 pocketmint" >> "$ROOTFS/etc/hosts"
-chroot "$ROOTFS" useradd -m -s /bin/bash -G video,audio,input mintkit
+# gpio and spi must exist before useradd or 99-mintkit.rules silently
+# discards its GROUP= lines on every boot ("Unknown group").
+chroot "$ROOTFS" groupadd -f -r gpio
+chroot "$ROOTFS" groupadd -f -r spi
+chroot "$ROOTFS" useradd -m -s /bin/bash -G video,audio,input,render,gpio,spi,adm,systemd-journal mintkit
 echo "mintkit:mintkit" | chroot "$ROOTFS" chpasswd
 mkdir -p "$ROOTFS/etc/sudoers.d"
 echo "mintkit ALL=(ALL) NOPASSWD:ALL" >> "$ROOTFS/etc/sudoers.d/mintkit"
@@ -175,7 +182,7 @@ echo "    First-boot expand service installed."
 echo "==> Writing /etc/fstab"
 # errors=continue prevents the kernel from remounting ro on any fsck issue at boot
 cat > "$ROOTFS/etc/fstab" <<'EOF'
-/dev/mmcblk0p1  /boot  vfat  defaults          0  2
+/dev/mmcblk0p1  /boot  vfat  ro,defaults       0  2
 /dev/mmcblk0p2  /      ext4  defaults,noatime,errors=continue  0  1
 /swapfile        none   swap  sw                0  0
 EOF

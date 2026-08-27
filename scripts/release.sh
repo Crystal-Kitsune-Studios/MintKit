@@ -2,8 +2,7 @@
 # scripts/release.sh — full PocketMint release builder
 # Usage: ./scripts/release.sh 1.0.0
 # Requires: xz, mktorrent, python3, gh (GitHub CLI), git, zip
-set -e
-
+set -euo pipefail
 VERSION="${1:?Usage: $0 <version> [name]  e.g. $0 1.2.1 Foxfire}"
 VERSION_NAME="${2:-}"  # optional codename, e.g. Foxfire
 
@@ -42,15 +41,38 @@ done
 # ── 2. Build image ────────────────────────────────────────────────────────────
 echo ""
 echo "==> Building image..."
+validate_image() {
+  # An image is only usable if it exists, is a plausible size, AND has a
+  # readable partition table. The old guards checked existence only, so a
+  # truncated or half-written .img happily got renamed, compressed, and shipped.
+  local img="$1"
+  if [ ! -f "$img" ]; then
+    echo "ERROR: image not found: $img" >&2
+    return 1
+  fi
+  local bytes
+  bytes=$(stat -c %s "$img")
+  if [ "$bytes" -lt 104857600 ]; then
+    echo "ERROR: $img is only $bytes bytes, too small to be a real image" >&2
+    return 1
+  fi
+  if ! parted -s "$img" print >/dev/null 2>&1; then
+    echo "ERROR: no readable partition table in $img" >&2
+    return 1
+  fi
+  echo "    validated $img ($bytes bytes)"
+}
+
 BASE_IMG="$DIST/mintkit-pizero2w.img"
 VERSIONED_IMG="$DIST/$IMG_NAME"
-if [ ! -f "$VERSIONED_IMG" ]; then
-  if [ ! -f "$BASE_IMG" ]; then
+if ! validate_image "$VERSIONED_IMG" >/dev/null 2>&1; then
+  if ! validate_image "$BASE_IMG" >/dev/null 2>&1; then
     sudo -E bash "$ROOT/scripts/build-firmware.sh"
     sudo -E bash "$ROOT/scripts/build-kernel.sh"
     sudo -E bash "$ROOT/scripts/build-image.sh"
   fi
   echo "==> Renaming image to versioned filename..."
+  validate_image "$BASE_IMG"
   cp "$BASE_IMG" "$VERSIONED_IMG"
 else
   echo "    Versioned image already exists, skipping build."
@@ -60,6 +82,7 @@ fi
 echo ""
 echo "==> Compressing image..."
 rm -f "$DIST"/*.img.xz
+validate_image "$VERSIONED_IMG"
 xz -9 --keep --threads=0 "$VERSIONED_IMG"
 echo "    Created: $DIST/$IMG_XZ"
 

@@ -60,14 +60,16 @@ framebuffer_width=800
 framebuffer_height=480
 disable_overscan=1
 
-# KMS for SDL2/pygame kmsdrm display driver
+# Real KMS. MintKit does NOT use the kmsdrm SDL driver; it runs
+# SDL_VIDEODRIVER=offscreen and blits RGB565 straight to /dev/fb0.
+# vc4-fkms-v3d must not be used here: fake KMS blocks async page flips.
 # cma-256: allocate 256MB CMA for GPU — required on Pi Zero 2W for /dev/dri/ to appear
 dtoverlay=vc4-kms-v3d,cma-256
 EOF
 
 # Generate cmdline.txt — removed 'quiet' so boot errors are visible
 cat > "$OUT/cmdline.txt" <<'EOF'
-console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait
+console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait video=HDMI-A-1:800x480@60 vt.global_cursor_default=0 cgroup_enable=memory cgroup_memory=1
 EOF
 
 echo "==> Pi Zero 2 W firmware ready: $OUT"

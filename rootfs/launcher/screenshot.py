@@ -7,11 +7,22 @@ SCREENSHOT_DIR = Path("/home/mintkit/.mintkit/screenshots")
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Ring buffer for clip capture (last N frames at 15fps effective)
-# IMPORTANT: push_frame throttles to every 4th frame (15fps) to prevent OOM.
-# At 60fps, surface.copy() at 640x480 = ~1.2MB/frame. Without throttling,
-# GC can't free old surfaces fast enough -> 72MB/s allocation -> OOM in ~30s.
-# 15fps * 30 frames = 9MB max buffer, safe on Pi Zero 2W.
-MAX_CLIP_FRAMES = 15 * 30  # 30 s @ 15 fps
+# push_frame throttles to every 4th frame (15fps).
+#
+# MEMORY MATH, corrected. Pi Zero 2W has 512MB of SoC RAM and only ~357MB is
+# visible to Linux once gpu_mem=128 is taken. The panel is 800x480, not 640x480,
+# and pygame surfaces here are 32bpp, so every surface.copy() costs
+#     800 * 480 * 4 = 1,536,000 bytes = 1.46 MB
+# The old value of 15 * 30 = 450 frames meant the deque could not start
+# evicting until it held 450 * 1.46 MB = 658 MB, which is larger than the
+# entire machine. The cap was therefore unreachable, the process paged out to
+# the SD card, and the OOM killer took it at ~186MB anon RSS.
+#     30 frames * 1.46 MB = ~44 MB, which the Pi can actually hold.
+#
+# TODO: for genuinely long clips, buffer downscaled RGB565 bytes instead of
+# full Surfaces. 400x240x2 = 192 KB/frame, so 50 frames is ~9.6 MB, which is
+# what the original 9MB comment was reaching for.
+MAX_CLIP_FRAMES = 30  # ~2 s @ 15 fps; 30 * 1.46 MB = ~44 MB at 800x480
 _frame_buffer: list[pygame.Surface] = []
 _pf_counter = 0
 

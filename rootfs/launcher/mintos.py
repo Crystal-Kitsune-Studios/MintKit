@@ -180,19 +180,41 @@ def uninstall_app(app_id):
     dest = GAMES_DIR / app_id
     if dest.exists(): shutil.rmtree(dest)
 
+def app_env():
+    """Environment handed to launched apps.
+
+    Apps render through launcher/mintfb.py, which blits to /dev/fb0, because
+    vc4-fkms-v3d blocks SDL kmsdrm on this board. The launcher runs with
+    SDL_AUDIODRIVER=dummy, so audio is re-enabled here for apps.
+    """
+    env = os.environ.copy()
+    env["SDL_VIDEODRIVER"] = "offscreen"
+    env["SDL_AUDIODRIVER"] = os.environ.get("MINTKIT_AUDIO", "alsa")
+    env["MINTKIT_LAUNCHER"] = str(Path(__file__).resolve().parent)
+    env["MINTKIT_DATA"] = str(DATA_DIR)
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in [str(Path(__file__).resolve().parent), env.get("PYTHONPATH", "")] if p
+    )
+    return env
+
+
 def launch(game, screen=None, clock=None):
     """Launch a game. Checks parental controls if restricted. Logs playtime."""
-    if game.get("restricted") and parental.is_enabled():
+    if game.get("restricted") and parental.is_locked(game.get("id", "")):
         if screen and clock:
-            if not parental.prompt_pin(screen, clock, "Enter PIN to launch"):
+            if not parental.prompt_pin(screen, clock):
                 return  # blocked
         else:
             return  # no display context — block silently
-    if parental.time_limit_reached():
+    if parental.check_time_limit():
         return  # daily limit hit
     entry = game["path"] / game.get("entry", "main.py")
-    subprocess.Popen([sys.executable, str(entry)])
-    parental.log_playtime(0)  # placeholder; real tracking done per-game
+    subprocess.Popen(
+        [sys.executable, str(entry)],
+        cwd=str(game["path"]),
+        env=app_env(),
+    )
+    parental.record_session(0.0)  # placeholder; real tracking done per-game
     # ── Achievement: first app launched ────────────────────────────────────
     achievements.unlock("app_installed")
     # ── Now Playing card — fire-and-forget push ──────────────────────────────

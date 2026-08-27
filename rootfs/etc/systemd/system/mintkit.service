@@ -1,25 +1,28 @@
 [Unit]
 Description=MintKit Launcher
-After=multi-user.target
+Conflicts=rescue.service rescue.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
 User=mintkit
+SupplementaryGroups=input video render
 WorkingDirectory=/home/mintkit
-ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
-Restart=on-failure
-RestartSec=3
-Environment=SDL_AUDIODRIVER=dummy
 Environment=HOME=/home/mintkit
 Environment=MINTKIT_DATA=/home/mintkit/.mintkit
-Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=SDL_VIDEODRIVER=offscreen
+Environment=SDL_AUDIODRIVER=dummy
+Environment=TZ=America/Chicago
 Environment=PYTHONPATH=/home/mintkit
-StandardInput=tty
-StandardOutput=tty
+ExecStartPre=/bin/dd if=/dev/zero of=/dev/fb0 bs=1024 count=750
+ExecStart=/usr/bin/python3 /home/mintkit/launcher/mintos.py
+Restart=on-failure
+RestartSec=5
+MemoryMax=300M
+StandardInput=null
+StandardOutput=journal
 StandardError=journal
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
 
 [Install]
 WantedBy=multi-user.target
