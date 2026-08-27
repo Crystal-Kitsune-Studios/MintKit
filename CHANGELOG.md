@@ -1,3 +1,29 @@
+# v2.0.0 (27 August 2026)
+
+- release: v1.3.1
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- Add arm64 runner test workflow
+- fixed service
+- chore: remove unneeded folders
+- release: v1.3.1
+
+# v1.3.1 (27 August 2026)
+
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- Add arm64 runner test workflow
+- fixed service
+- chore: remove unneeded folders
+- release: v1.3.1
+
+# v1.3.1 (27 August 2026)
+
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+- fix: OOM in clip buffer, parental API, service unit, build scripts
+
 # v1.3.1 (27 August 2026)
 
 - fix: OOM in clip buffer, parental API, service unit, build scripts
