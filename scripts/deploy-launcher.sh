@@ -21,7 +21,7 @@ SRC="${LAUNCHER_SRC:-$ROOT/rootfs/launcher}"
 WWW="${LAUNCHER_WWW:-/var/www/pocketmint/launcher}"
 
 # Keep this list in sync with LAUNCHER_FILES in updater.py.
-FILES=(mintos.py updater.py screenshot.py parental.py settings.py themes.py)
+FILES=(mintos.py updater.py screenshot.py parental.py settings.py themes.py inputbridge.py)
 
 echo "==> Publishing launcher v$VERSION from $SRC"
 

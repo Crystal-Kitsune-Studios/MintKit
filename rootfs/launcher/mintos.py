@@ -66,11 +66,13 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 2.0.0 \"Spearmint\""
+VERSION   = "MintKit 2.0.1 \"Spearmint\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
 import hashlib as _hl
+from launcher.inputbridge import start as start_input_bridge
+start_input_bridge()
 def _get_device_id() -> str:
     mid = Path("/etc/machine-id")
     if mid.exists(): return mid.read_text().strip()[:16]
