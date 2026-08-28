@@ -165,8 +165,8 @@ Before=mintkit.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/growpart /dev/mmcblk0 2
-ExecStart=/usr/bin/resize2fs /dev/mmcblk0p2
+ExecStart=-/usr/bin/growpart /dev/mmcblk0 2
+ExecStart=/usr/sbin/resize2fs /dev/mmcblk0p2
 ExecStartPost=/bin/rm -f /etc/mintkit-expand-pending
 RemainAfterExit=yes
 

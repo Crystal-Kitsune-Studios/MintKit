@@ -1,3 +1,10 @@
+# v2.0.1 (28 August 2026)
+
+- feat(input): add evdev input bridge so keyboards and gamepads reach the launcher
+- Added inputbridge.py
+- Fix: Added inputbridge.py to add keyboard support
+- chore: bump MINTKIT_VERSION to 2.0.0
+
 Changelog
 All notable changes to MintKit are recorded here. Entries from 2.0.0 onward are
 written by hand. Everything below the "Earlier releases" divider was generated
