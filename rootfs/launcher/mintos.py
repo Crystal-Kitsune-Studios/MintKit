@@ -66,7 +66,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 2.0.2 \"Spearmint\""
+VERSION   = "MintKit 2.0.3 \"Spearmint\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
@@ -674,7 +674,7 @@ class Settings:
                 label = self.OPTS[self.cur][0]
                 if label == "Themes":  return "themes", None
                 if label == "Shutdown":
-                    if IS_LINUX: subprocess.run(["poweroff"])
+                    if IS_LINUX: subprocess.run(["sudo", "poweroff"])
                 if label == "Back": return "back", None
             elif ev.key in (pygame.K_ESCAPE, pygame.K_x): return "back", None
         return None, None
@@ -818,9 +818,8 @@ def main():
 
         # ── Sleep timer tick (runs every frame) ─────────────────────────────
         _sleep_state = sleep_timer.tick(screen, clock) if state != "boot" else None
-        if _sleep_state == "shutdown":
-            if IS_LINUX: os.system("sudo poweroff")
-            else: pygame.quit(); sys.exit()
+        if _sleep_state:
+            sleep_timer.sleep_and_wake(screen, clock)
 
         if state == "boot":
             if boot.update(): state = "menu"; active = menu

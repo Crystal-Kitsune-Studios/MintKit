@@ -1,110 +1,226 @@
 #!/usr/bin/env python3
-"""Verify every 'from launcher.X import Y' in a launcher tree actually resolves.
+"""check-launcher-imports.py -- pre-publish import guard for the MintKit launcher.
 
 Usage:
-  check-launcher-imports.py <launcher_src_dir> [shipped_file ...]
+    check-launcher-imports.py <launcher_dir> [shipped_file ...]
 
-Exit 1 on any hard error. Shipped file list is optional; when given, the script
-also warns when a published module depends on a module that is NOT published,
-which is the failure mode that breaks OTA updates.
+Resolves three import shapes against the files actually present on disk:
+
+    from launcher.MOD import NAME   ->  MOD.py exists AND defines top-level NAME
+    from launcher import MOD        ->  MOD.py exists (or NAME lives in __init__.py)
+    import launcher.MOD             ->  MOD.py exists
+
+ERROR (exit 1)  an import cannot resolve. The launcher will crash at boot.
+WARN  (exit 0)  a module resolves locally but is missing from the shipped-file
+                list, so an OTA push would ship a broken pair.
+
+v2: added the 'from launcher import MOD' shape. v1 only understood
+'from launcher.MOD import NAME' and 'import launcher.MOD', which is why it
+missed 'from launcher import mintcalc'.
 """
-import ast, sys
-from pathlib import Path
 
-# build-rootfs.sh creates a compat symlink sleep.py -> sleep_timer.py
+import ast
+import os
+import sys
+
+# build-rootfs.sh creates sleep.py as a symlink to sleep_timer.py, so the
+# import name and the repo filename differ.
 ALIASES = {"sleep": "sleep_timer"}
 
 
-def toplevel_names(path):
-    tree = ast.parse(path.read_text(), filename=str(path))
+def top_level_names(path):
+    """Every name a module binds at module scope."""
     names = set()
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+    except SyntaxError as exc:
+        return names, "%s: syntax error: %s" % (os.path.basename(path), exc)
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.add(node.name)
         elif isinstance(node, ast.Assign):
-            for t in node.targets:
-                if isinstance(t, ast.Name):
-                    names.add(t.id)
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+                elif isinstance(target, (ast.Tuple, ast.List)):
+                    for elt in target.elts:
+                        if isinstance(elt, ast.Name):
+                            names.add(elt.id)
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name):
                 names.add(node.target.id)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            for a in node.names:
-                names.add((a.asname or a.name).split(".")[0])
-    return names
+            for alias in node.names:
+                names.add(alias.asname or alias.name.split(".")[0])
+    return names, None
 
 
-def resolve(src, mod):
-    mod = ALIASES.get(mod, mod)
-    return src / (mod + ".py")
-
-
-def main():
-    if len(sys.argv) < 2:
-        print(__doc__, file=sys.stderr)
-        return 2
-    src = Path(sys.argv[1])
-    shipped = set(sys.argv[2:])
-    if not src.is_dir():
-        print("ERROR: not a directory: " + str(src), file=sys.stderr)
+def main(argv):
+    if len(argv) < 2:
+        sys.stderr.write(__doc__)
         return 2
 
-    errors, warnings, cache = [], [], {}
+    src = argv[1].rstrip("/")
+    shipped = set(argv[2:])
 
-    for f in sorted(src.glob("*.py")):
+    if not os.path.isdir(src):
+        print("ERROR: %s is not a directory" % src)
+        return 1
+
+    present = set()
+    for entry in os.listdir(src):
+        if entry.endswith(".py"):
+            present.add(entry[:-3])
+
+    init_names = set()
+    init_path = os.path.join(src, "__init__.py")
+    if os.path.isfile(init_path):
+        init_names, _ = top_level_names(init_path)
+
+    cache = {}
+
+    def names_of(module):
+        if module not in cache:
+            cache[module] = top_level_names(os.path.join(src, module + ".py"))
+        return cache[module]
+
+    def resolve(module):
+        """Import name -> real module stem on disk, or None."""
+        if module in present:
+            return module
+        alias = ALIASES.get(module)
+        if alias and alias in present:
+            return alias
+        return None
+
+    errors = []
+    warnings = []
+    deps = {}
+
+    sources = sorted(f for f in os.listdir(src) if f.endswith(".py"))
+
+    for filename in sources:
+        path = os.path.join(src, filename)
         try:
-            tree = ast.parse(f.read_text(), filename=str(f))
-        except SyntaxError as e:
-            errors.append(f.name + ": syntax error line " + str(e.lineno) + ": " + e.msg)
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                tree = ast.parse(fh.read(), filename=path)
+        except SyntaxError as exc:
+            errors.append("%s: syntax error: %s" % (filename, exc))
             continue
 
+        used = deps.setdefault(filename, set())
+
         for node in ast.walk(tree):
-            mods = []
-            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("launcher."):
-                mods.append((node.module.split(".", 1)[1], node.names, node.lineno))
-            elif isinstance(node, ast.Import):
-                for a in node.names:
-                    if a.name.startswith("launcher."):
-                        mods.append((a.name.split(".", 1)[1], [], node.lineno))
-
-            for mod, aliases, lineno in mods:
-                target = resolve(src, mod)
-                if not target.exists():
-                    errors.append(f.name + ":" + str(lineno) + ": imports launcher." + mod + " but " + target.name + " is missing")
+            if isinstance(node, ast.ImportFrom):
+                if node.level > 1:
                     continue
-                if target not in cache:
-                    try:
-                        cache[target] = toplevel_names(target)
-                    except SyntaxError as e:
-                        errors.append(target.name + ": syntax error line " + str(e.lineno))
-                        cache[target] = set()
-                names = cache[target]
-                for a in aliases:
-                    if a.name == "*":
-                        continue
-                    if a.name not in names:
-                        errors.append(f.name + ":" + str(lineno) + ": 'from launcher." + mod + " import " + a.name + "' but " + target.name + " defines no top-level '" + a.name + "'")
-                if shipped and f.name in shipped and target.name not in shipped:
-                    w = f.name + " is published but its dependency " + target.name + " is NOT in FILES -- OTA would ship a broken pair"
-                    if w not in warnings:
-                        warnings.append(w)
+                if node.level == 1:
+                    # 'from . import themes' and 'from .battery import draw_bar'
+                    # mean exactly the same thing as the absolute forms inside
+                    # the launcher package. Rewrite and fall through so the
+                    # same checks apply.
+                    node.module = (
+                        "launcher" if not node.module else "launcher." + node.module
+                    )
+                    node.level = 0
+                if not node.module:
+                    continue
 
-    for w in warnings:
-        print("WARN:  " + w)
-    for e in errors:
-        print("ERROR: " + e)
+                # shape: from launcher import MOD [, MOD2]
+                if node.module == "launcher":
+                    for alias in node.names:
+                        target = alias.name
+                        real = resolve(target)
+                        if real is None:
+                            if target in init_names:
+                                continue
+                            errors.append(
+                                "%s:%d: 'from launcher import %s' but %s.py "
+                                "does not exist in %s"
+                                % (filename, node.lineno, target, target, src)
+                            )
+                        else:
+                            used.add(real + ".py")
+
+                # shape: from launcher.MOD import NAME
+                elif node.module.startswith("launcher."):
+                    module = node.module.split(".")[1]
+                    real = resolve(module)
+                    if real is None:
+                        errors.append(
+                            "%s:%d: 'from %s import ...' but %s.py does not "
+                            "exist in %s"
+                            % (filename, node.lineno, node.module, module, src)
+                        )
+                        continue
+                    used.add(real + ".py")
+                    defined, syntax_error = names_of(real)
+                    if syntax_error:
+                        errors.append("%s:%d: %s" % (filename, node.lineno, syntax_error))
+                        continue
+                    for alias in node.names:
+                        if alias.name == "*":
+                            continue
+                        if alias.name not in defined:
+                            errors.append(
+                                "%s:%d: 'from %s import %s' but %s.py defines "
+                                "no top-level '%s'"
+                                % (
+                                    filename,
+                                    node.lineno,
+                                    node.module,
+                                    alias.name,
+                                    real,
+                                    alias.name,
+                                )
+                            )
+
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if not alias.name.startswith("launcher."):
+                        continue
+                    module = alias.name.split(".")[1]
+                    real = resolve(module)
+                    if real is None:
+                        errors.append(
+                            "%s:%d: 'import %s' but %s.py does not exist in %s"
+                            % (filename, node.lineno, alias.name, module, src)
+                        )
+                    else:
+                        used.add(real + ".py")
+
+    if shipped:
+        for filename in sorted(shipped):
+            if not os.path.isfile(os.path.join(src, filename)):
+                errors.append(
+                    "%s is in the shipped list but does not exist in %s"
+                    % (filename, src)
+                )
+        for filename in sorted(shipped):
+            for dep in sorted(deps.get(filename, ())):
+                if dep not in shipped:
+                    warnings.append(
+                        "%s is published but its dependency %s is NOT in FILES "
+                        "-- OTA would ship a broken pair" % (filename, dep)
+                    )
+
+    for line in warnings:
+        print("WARN:  %s" % line)
+    for line in errors:
+        print("ERROR: %s" % line)
 
     if errors:
         print("")
-        print("FAILED: " + str(len(errors)) + " unresolved launcher import(s). Refusing to publish.")
+        print(
+            "FAILED: %d unresolved launcher import(s). Refusing to publish."
+            % len(errors)
+        )
         return 1
-    if warnings:
-        print("")
-        print("PASSED with " + str(len(warnings)) + " warning(s).")
-        return 0
+
     print("OK: all launcher imports resolve.")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))
