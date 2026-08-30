@@ -9,7 +9,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [2.1.0] - 2026-08-30 "Spearmint"
+## [2.0.3] - 2026-08-29 "Spearmint"
 
 The idle timer powered the device off instead of sleeping, and had done so since
 the feature was written. It went unnoticed for months because the launcher never
@@ -61,26 +61,6 @@ successful boot lasted nineteen minutes before the device shut itself down.
   `from .MOD import NAME`. The relative forms were skipped entirely by the first
   version of the guard, which matters because `sleep_timer.py` uses exactly
   that syntax. Run against the full tree, all 24 modules resolve.
-- Screen saver, shown before the device sleeps. Four modes: `bounce` (a
-  DVD style POCKETMINT wordmark with a corner hit counter), `starfield`,
-  `clock` (large drifting time, date and battery) and `rain`. Chosen with
-  `screensaver_mode`, started after `screensaver_secs` of idle, disabled
-  with `0` or `"off"`. It owns its own frames at 30 fps, allocates every
-  surface once at start so a frame is fill and blit only, hands control
-  back on real input, and hands over to sleep when the sleep timeout
-  arrives. Analog axes and hats are excluded from wake, so a drifting
-  stick cannot hold the panel awake. Setting `sleep_timeout_secs` to `0`
-  alongside a small `screensaver_secs` gives a saver that never sleeps.
-- `screensaver.py` is imported defensively by `sleep_timer.py`, so a
-  device that receives a partial update degrades to plain sleep instead
-  of crash looping, which is how 2.0.2 became unbootable.
-- `fix_ota_lists.py`, which rebuilds `LAUNCHER_FILES` and `FILES` from
-  parsed tokens instead of substituting text, and reports any module
-  present in one OTA list but not the other, or listed but absent on
-  disk. Both lists now carry `screensaver.py`.
-- `hook_screensaver.py`, which wires the saver into `SleepTimer.tick()`
-  by locating the method with `ast` and compiling the result before it
-  writes anything.
 
 ### Known issues
 

@@ -9,7 +9,7 @@ LAUNCHER_DIR    = Path(__file__).parent
 VERSION_FILE    = Path(os.environ.get("HOME", ".")) / ".mintkit" / "version.txt"
 PENDING_FILE    = Path(os.environ.get("HOME", ".")) / ".mintkit" / "pending_update.json"
 
-LAUNCHER_FILES  = ["mintos.py", "updater.py", "inputbridge.py", "screenshot.py", "parental.py", "settings.py", "themes.py", "battery.py", "splash.py", "sleep_timer.py", "mintcalc.py"]
+LAUNCHER_FILES  = ["mintos.py", "updater.py", "inputbridge.py", "screenshot.py", "parental.py", "settings.py", "themes.py", "battery.py", "splash.py", "sleep_timer.py", "screensaver.py", "mintcalc.py"]
 
 def get_local_version():
     if VERSION_FILE.exists():

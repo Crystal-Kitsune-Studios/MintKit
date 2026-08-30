@@ -25,6 +25,12 @@ from pathlib import Path
 from . import themes as th
 import pygame
 
+try:
+    from . import screensaver as _saver
+except Exception:
+    # screensaver.py not deployed: degrade to plain sleep, never crash.
+    _saver = None
+
 DATA_DIR = Path(os.environ.get("MINTKIT_DATA", Path.home() / ".mintkit"))
 CONFIG_FILE = DATA_DIR / "config.json"
 
@@ -146,6 +152,12 @@ class SleepTimer:
 
         Draws a countdown warning overlay when near the timeout.
         """
+        # Screen saver phase. Owns its own frames, so it must run
+        # before anything else in the tick.
+        if _saver is not None:
+            _hooked = _saver.hook(self, screen, clock)
+            if _hooked is not None:
+                return _hooked
         t = self.timeout()
         if t <= 0:
             return False

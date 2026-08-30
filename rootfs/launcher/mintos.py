@@ -66,7 +66,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 2.0.3 \"Spearmint\""
+VERSION   = "MintKit 2.1.0 \"Spearmint\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
