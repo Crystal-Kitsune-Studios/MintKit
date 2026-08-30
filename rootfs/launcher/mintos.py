@@ -66,7 +66,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 2.1.0 \"Spearmint\""
+VERSION   = "MintKit 2.2.0 \"Spearmint\""
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
@@ -710,7 +710,7 @@ def main():
     clock  = pygame.time.Clock()
 
     # ── Boot splash (shown once before any UI) ──────────────────────────────
-    show_splash(screen, clock)
+    show_splash(screen, clock, version=VERSION)
     # ── First boot achievement ───────────────────────────────────────────────
     achievements.unlock("first_boot")  # no-op after the first time
     # ── Logging (verbose in Dev Mode) ────────────────────────────────────────

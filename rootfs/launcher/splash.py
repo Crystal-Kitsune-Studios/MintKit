@@ -5,7 +5,7 @@ from pathlib import Path
 from . import themes as th
 import pygame
 
-SCREEN_W, SCREEN_H = 640, 480
+SCREEN_W, SCREEN_H = 800, 480
 DATA_DIR   = Path(os.environ.get("MINTKIT_DATA", Path.home() / ".mintkit"))
 CUSTOM_IMG = DATA_DIR / "splash.png"
 DEFAULT_MS = 2500   # how long to show splash (ms)
@@ -15,6 +15,24 @@ DEFAULT_MS = 2500   # how long to show splash (ms)
 # to appear frozen due to repeated font-cache lookups at 60 fps.
 _fonts_cache: dict = {}
 
+def _short_version(raw: str) -> str:
+    """Turn 'MintKit 2.1.0 "Spearmint"' into 'v2.1.0 "Spearmint"'."""
+    text = (raw or "").strip()
+    if text.lower().startswith("mintkit"):
+        text = text[len("mintkit"):].strip()
+    if text and not text.startswith("v"):
+        text = "v" + text
+    return text
+
+
+def _fallback_version() -> str:
+    """Last resort: whatever the OTA updater last wrote. Never raises."""
+    try:
+        return _short_version((DATA_DIR / "version.txt").read_text().strip())
+    except Exception:
+        return ""
+
+
 def _get_fonts() -> dict:
     """Return cached fonts, loading them once on first call."""
     if not _fonts_cache:
@@ -23,12 +41,13 @@ def _get_fonts() -> dict:
     return _fonts_cache
 
 
-def show(screen, clock, duration_ms: int = DEFAULT_MS):
+def show(screen, clock, duration_ms: int = DEFAULT_MS, version: str = ""):
     """
     Show the boot splash for duration_ms milliseconds.
     Pressing any key or button skips it early.
     """
     p = th.get()
+    SCREEN_W, SCREEN_H = screen.get_size()
 
     # Load fonts once before the render loop.
     fonts = _get_fonts()
@@ -66,21 +85,23 @@ def show(screen, clock, duration_ms: int = DEFAULT_MS):
             img.set_alpha(alpha)
             screen.blit(img, (0, 0))
         else:
-            _draw_default(screen, p, alpha, fonts)
+            _draw_default(screen, p, alpha, fonts, version)
 
         pygame.display.flip()
 
 
-def _draw_default(screen, p: dict, alpha: int, fonts: dict):
+def _draw_default(screen, p: dict, alpha: int, fonts: dict, version: str = ""):
     """
     Render the default MintKit splash.
     Fonts are passed in (loaded once by show()) to avoid per-frame SysFont() calls.
     """
+    SCREEN_W, SCREEN_H = screen.get_size()
+
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
 
     title = fonts["xl"].render("MintKit", True, p["accent"])
     sub   = fonts["sm"].render("PocketMint OS", True, p["dim"])
-    ver   = fonts["sm"].render("v1.3.0", True, p["dim"])
+    ver   = fonts["sm"].render(_short_version(version) or _fallback_version(), True, p["dim"])
 
     overlay.blit(title, (SCREEN_W // 2 - title.get_width() // 2, 160))
     overlay.blit(sub,   (SCREEN_W // 2 - sub.get_width() // 2,   220))

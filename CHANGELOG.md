@@ -9,6 +9,75 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.2.0] - 2026-08-30 "Spearmint"
+
+The boot screen had been reporting v1.3.0 since Foxfire. The version was a
+string literal in `splash.py`, so it never followed `VERSION` and every release
+since has quietly announced the wrong one to anyone watching the device start.
+
+### Fixed
+
+- **The boot splash reported a hardcoded `v1.3.0`.** `splash.py` rendered the
+  version from a string literal, so the boot screen, the About entry and the
+  release tag had drifted three minor versions apart. `show()` now takes the
+  version from its caller, `mintos.py` passes its single `VERSION` constant,
+  and the splash falls back to `~/.mintkit/version.txt`, which the OTA updater
+  already maintains, if it is called without one. Bumping `VERSION` now moves
+  all three together.
+- **The boot splash was laid out for a 640x480 panel.** It allocated a 640 wide
+  overlay and centred every element at `x=320` on an 800x480 display, leaving
+  the whole splash 80 px left of centre. Both renderers now derive their size
+  from `screen.get_size()`. This is the same defect fixed in the sleep warning
+  overlay in 2.1.0. `splash.py` had its own copy of it.
+
+### Added
+
+- **Three more screen saver modes, seven in total.** `beams`, five rotating
+  light arms on a Lissajous orbit with baked shade and width tables; `bubbles`,
+  sixteen drifting spheres composited from fifteen pre-rendered sprites; and
+  `kitsune`, a three tailed fox chasing butterflies across the panel. As with
+  the original four, every surface is allocated once at start, so a frame is
+  fill and blit only.
+- **Power aware sleep.** The idle timeout now depends on where the power is
+  coming from. On wall power the device does not sleep and the saver runs
+  indefinitely. On battery it uses `sleep_timeout_secs`. At or below
+  `low_battery_pct`, 20 by default, it drops to `sleep_timeout_low_secs`, 90 by
+  default. An unknown power state deliberately falls back to the configured
+  timeout, so a missing battery driver can never pin the panel awake. While
+  held awake on wall power the saver re-checks the power source every five
+  minutes, so unplugging is noticed without a restart. Tunable with
+  `power_aware_sleep`, `sleep_timeout_charging_secs`, `sleep_timeout_low_secs`
+  and `low_battery_pct`.
+- **`launcher/pisugar.py`**, a PiSugar 3 battery reader. The PiSugar is an I2C
+  device and never appears under `/sys/class/power_supply`, so `battery.get()`
+  returns `None` on a PocketMint and the power policy had nothing to read. It
+  prefers `pisugar-server` over its unix socket or TCP 8423 when the daemon is
+  running, and otherwise talks to the MCU at `0x57` on `/dev/i2c-1` directly
+  through `ioctl`, with no third party library and no pip install. Register
+  map from the official PiSugar 3 datasheet: bit 7 of `0x02` is external power
+  connected, `0x2A` is the calculated percentage, `0x22` and `0x23` are the
+  battery voltage in mV. Returns the same shape as `battery.get()`, and `None`
+  rather than a guess when nothing answers.
+- **`scripts/fix_splash_version.py`**, which applies both splash fixes, backs
+  up first, and refuses to write a result that does not compile.
+
+### Known issues
+
+- I2C is disabled in the shipped `config.txt`, so `/dev/i2c-1` does not exist
+  on a fresh flash and `pisugar.py` reads as unknown power state until
+  `dtparam=i2c_arm=on` and the `i2c-dev` module are added. `mintkit.service`
+  will also need `i2c` in `SupplementaryGroups`, because a systemd unit does
+  not inherit group membership granted with `usermod`. Belongs in
+  `build-rootfs.sh`.
+- The image still ships `/etc/resolv.conf` copied from the CI runner, pointing
+  at `127.0.0.53` for a `systemd-resolved` that is not installed, plus an Azure
+  internal search domain. DNS fails on a fresh flash until the file is
+  replaced. Fix belongs in `build-rootfs.sh`.
+- `launcher/mintfb.py` is referenced by the `app_env()` docstring but does not
+  exist. Nothing imports it, so it is documentation drift rather than a crash.
+
+---
+
 ## [2.1.0] - 2026-08-30 "Spearmint"
 
 The idle timer powered the device off instead of sleeping, and had done so since
