@@ -11,6 +11,7 @@ if IS_LINUX:
     os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
 
 import pygame
+import mintfb
 
 SCREEN_W, SCREEN_H = 640, 480
 FPS = 60

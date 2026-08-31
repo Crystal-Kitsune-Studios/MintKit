@@ -21,7 +21,7 @@ SRC="${LAUNCHER_SRC:-$ROOT/rootfs/launcher}"
 WWW="${LAUNCHER_WWW:-/var/www/pocketmint/launcher}"
 
 # Keep this list in sync with LAUNCHER_FILES in updater.py.
-FILES=(mintos.py updater.py screenshot.py parental.py settings.py themes.py inputbridge.py battery.py splash.py sleep_timer.py screensaver.py mintcalc.py pisugar.py achievements.py desktop.py friends_ui.py mintshell.py overlay.py savestates.py scores.py sideload.py themes_ui.py)
+FILES=(mintos.py updater.py screenshot.py parental.py settings.py themes.py inputbridge.py battery.py splash.py sleep_timer.py screensaver.py mintcalc.py pisugar.py achievements.py desktop.py friends_ui.py mintshell.py overlay.py savestates.py scores.py sideload.py themes_ui.py mintfb.py sitecustomize.py)
 echo "==> Publishing launcher v$VERSION from $SRC"
 
 # 1. Every file must exist and compile. Serving a launcher with a SyntaxError

@@ -9,6 +9,7 @@ if IS_LINUX:
     os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
 
 import pygame
+import mintfb
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "launcher"))
 import themes as th

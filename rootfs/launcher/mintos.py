@@ -66,7 +66,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION   = "MintKit 2.2.0 \"Spearmint\""
+VERSION = 'MintKit 2.2.1 "Spearmint"'
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
@@ -194,6 +194,7 @@ def app_env():
     env["SDL_AUDIODRIVER"] = os.environ.get("MINTKIT_AUDIO", "alsa")
     env["MINTKIT_LAUNCHER"] = str(Path(__file__).resolve().parent)
     env["MINTKIT_DATA"] = str(DATA_DIR)
+    env["MINTKIT_CHILD_APP"] = "1"
     env["PYTHONPATH"] = os.pathsep.join(
         p for p in [str(Path(__file__).resolve().parent), env.get("PYTHONPATH", "")] if p
     )
@@ -211,7 +212,7 @@ def launch(game, screen=None, clock=None):
     if parental.check_time_limit():
         return  # daily limit hit
     entry = game["path"] / game.get("entry", "main.py")
-    subprocess.Popen(
+    subprocess.run(
         [sys.executable, str(entry)],
         cwd=str(game["path"]),
         env=app_env(),
