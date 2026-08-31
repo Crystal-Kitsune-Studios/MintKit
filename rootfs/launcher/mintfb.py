@@ -73,3 +73,17 @@ if sys.platform == "linux":
 
     pygame.display.flip = flip
     pygame.display.update = flip
+
+# Standalone apps also need MintKit's evdev-to-pygame input bridge.
+try:
+    from inputbridge import start as _start_input_bridge
+    _start_input_bridge()
+except Exception as _exc:
+    print(f"[mintfb] input bridge failed: {_exc}", file=sys.stderr)
+
+# Standalone apps also need MintKit's evdev-to-pygame input bridge.
+try:
+    from inputbridge import start as _start_input_bridge
+    _start_input_bridge()
+except Exception as _exc:
+    print(f"[mintfb] input bridge failed: {_exc}", file=sys.stderr)
