@@ -46,6 +46,13 @@ TABS = ["THEME", "WIFI", "DISPLAY", "SOUND", "SYSTEM"]
 # ── Wi-Fi helpers ─────────────────────────────────────────────────────────
 WPA_IFACE = "wlan0"
 
+
+def _err(e):
+    """Last line of what the command actually said, not just its exit code."""
+    out = (getattr(e, "output", "") or "").strip().splitlines()
+    return out[-1] if out else str(e)
+
+
 def _wpa(*args, timeout=8):
     return subprocess.check_output(
         ["sudo", "wpa_cli", "-i", WPA_IFACE, *args],
@@ -64,12 +71,12 @@ def scan_wifi():
     try:
         _wpa("scan")
     except Exception as e:
-        return [], f"Scan failed: {e}"
+        return [], f"Scan failed: {_err(e)}"
     time.sleep(2.5)
     try:
         out = _wpa("scan_results")
     except Exception as e:
-        return [], f"Scan failed: {e}"
+        return [], f"Scan failed: {_err(e)}"
     cur  = current_ssid()
     seen = {}
     for line in out.splitlines()[1:]:
@@ -165,18 +172,18 @@ def confirm_dialog(screen, clock, font, message: str) -> bool:
                 if ev.key in (pygame.K_RETURN, pygame.K_y): result = True; running = False
                 elif ev.key in (pygame.K_ESCAPE, pygame.K_n): running = False
         screen.fill(p["bg"])
-        ov = pygame.Surface((640, 480), pygame.SRCALPHA)
+        sw, sh = screen.get_size(); card = (sw // 2 - 260, sh // 2 - 100, 520, 200); ov = pygame.Surface((sw, sh), pygame.SRCALPHA)
         ov.fill((0, 0, 0, 180)); screen.blit(ov, (0, 0))
-        pygame.draw.rect(screen, p["card"],   (60, 130, 520, 200), border_radius=6)
-        pygame.draw.rect(screen, p["accent"], (60, 130, 520, 200), 1, border_radius=6)
+        pygame.draw.rect(screen, p["card"],   card, border_radius=6)
+        pygame.draw.rect(screen, p["accent"], card, 1, border_radius=6)
         for i, line in enumerate(lines):
             t = font.render(line, True, p["white"])
-            screen.blit(t, (320 - t.get_width() // 2, 148 + i * 22))
+            screen.blit(t, (sw // 2 - t.get_width() // 2, card[1] + 18 + i * 22))
         for i, (label, col) in enumerate([("Yes  (Enter)", p["accent"]), ("No   (Esc)", (220, 60, 60))]):
-            bx = 100 + i * 240
-            pygame.draw.rect(screen, col, (bx, 268, 180, 30), border_radius=4)
+            bx = card[0] + 40 + i * 240
+            pygame.draw.rect(screen, col, (bx, card[1] + 138, 180, 30), border_radius=4)
             bt = font.render(label, True, p["black"])
-            screen.blit(bt, (bx + 90 - bt.get_width() // 2, 275))
+            screen.blit(bt, (bx + 90 - bt.get_width() // 2, card[1] + 145))
         pygame.display.flip()
     return result
 
@@ -323,7 +330,7 @@ def run(screen, clock):
                         elif event.key in (pygame.K_DOWN, pygame.K_s):
                             wifi_cur = min(len(wifi_networks)-1, wifi_cur+1)
                         elif event.key == pygame.K_z:
-                            wifi_networks[:], wifi_status = scan_wifi()
+                            wifi_status = "Scanning..."
                         elif event.key == pygame.K_RETURN and wifi_networks:
                             wifi_input_mode = True
                             wifi_input_ssid = wifi_networks[wifi_cur]["ssid"]
@@ -421,12 +428,12 @@ def run(screen, clock):
         elif tab == 2:  # Display
             draw_slider("Brightness", display_brightness, display_max, CONTENT_Y)
             try:
-                info = subprocess.check_output(["fbset"],text=True,stderr=subprocess.DEVNULL)
+                info = "mode " + chr(34) + open("/sys/class/graphics/fb0/virtual_size").read().strip().replace(",", "x") + chr(34)
                 for line in info.splitlines():
                     if "mode" in line.lower() and '"' in line:
                         draw_row("Resolution", line.strip().strip('mode').strip().strip('"'),
                                  CONTENT_Y+46); break
-            except: draw_row("Resolution", "640x480", CONTENT_Y+46)
+            except: draw_row("Resolution", "unknown", CONTENT_Y+46)
             draw_hint(("\u2191\u2193","BRIGHTNESS"),("Esc","BACK"))
 
         elif tab == 3:  # Sound
@@ -450,5 +457,8 @@ def run(screen, clock):
             draw_hint(("R","REBOOT"),("S","SHUTDOWN"),("D","DEV MODE"),("Esc","BACK"))
 
         pygame.display.flip()
+
+        if wifi_status == "Scanning...":
+            wifi_networks[:], wifi_status = scan_wifi()
 
     pygame.key.set_repeat(0)  # restore launcher's key repeat settings

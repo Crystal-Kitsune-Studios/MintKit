@@ -19,18 +19,7 @@ else:
 import pygame
 import numpy as _np
 
-# ── fb0 framebuffer display path ───────────────────────────────────────────
-# SDL_VIDEODRIVER=offscreen renders to an in-memory surface; we blit it to
-# /dev/fb0 each frame via a fast numpy RGB888→RGB565 conversion.
-# pygame.display.flip is monkey-patched so no other code needs to change.
-if IS_LINUX:
-    _fb0h = open("/dev/fb0", "wb")
-    def _fb0_flip():
-        s = pygame.display.get_surface()
-        a = pygame.surfarray.array3d(s).transpose(1, 0, 2).astype(_np.uint16)
-        rgb = ((a[:,:,0] & 0xF8) << 8) | ((a[:,:,1] & 0xFC) << 3) | (a[:,:,2] >> 3)
-        _fb0h.seek(0); _fb0h.write(rgb.astype("<u2").tobytes()); _fb0h.flush()
-    pygame.display.flip = _fb0_flip
+from launcher import mintfb  # noqa: F401  -- patches pygame.display.flip
 
 # ── OS built-in imports ────────────────────────────────────────────────────
 from launcher.splash  import show   as show_splash
@@ -66,7 +55,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION = 'MintKit 3.0.1 "Peppermint"'
+VERSION = 'MintKit 3.1.0 "Peppermint"'
 
 # --- First boot setup gate ---
 SETUP_FLAG   = Path("/home/mintkit/.setup-complete")
@@ -348,14 +337,14 @@ class MainMenu:
             pygame.draw.line(s, ACCENT, (0, SCREEN_H - 58), (SCREEN_W, SCREEN_H - 58), 1)
             msg = f"UPDATE AVAILABLE  v{v}  --  Press U to install"
             blit_c(s, _r(self.fonts, "xs", msg, ACCENT), SCREEN_H - 54)
-        if self.ota and self.ota.applying:
-            pygame.draw.rect(s, (13, 45, 22), (0, SCREEN_H - 58, SCREEN_W, 20))
+        if self.ota and (self.ota.applying or getattr(self.ota, "fail_notice", "")):
+            pygame.draw.rect(s, ((60, 16, 16) if getattr(self.ota, "fail_notice", "") else (13, 45, 22)), (0, SCREEN_H - 58, SCREEN_W, 20))
             pygame.draw.line(s, ACCENT, (0, SCREEN_H - 58), (SCREEN_W, SCREEN_H - 58), 1)
-            blit_c(s, _r(self.fonts, "xs", "Downloading update...", DIM), SCREEN_H - 54)
+            blit_c(s, _r(self.fonts, "xs", getattr(self.ota, "fail_notice", "") or "Downloading update...", DIM), SCREEN_H - 54)
         if self.ota and self.ota.apply_result:
             success, version = self.ota.apply_result
             self.ota.apply_result = None
-            if success: self.ota.restart_launcher()
+            self.ota.restart_launcher() if success else setattr(self.ota, "fail_notice", "Update %s failed: %s" % (version, ", ".join(self.ota.failed_files[:3]) or "unknown reason"))
         draw_hints(s, self.fonts, [("Z/Enter", "SELECT"), ("X/Esc", "BACK")])
 
 

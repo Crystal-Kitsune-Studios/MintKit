@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 LAUNCHER_DIR = Path(__file__).resolve().parent
@@ -187,16 +188,82 @@ def step_hostname(ui, step, total):
         sh(["sudo", "hostnamectl", "set-hostname", name])
 
 
+WPA_IFACE = "wlan0"
+WPA_IFACE_CONF = Path("/etc/wpa_supplicant/wpa_supplicant-%s.conf" % WPA_IFACE)
+
+
+def _wpa(*args, timeout=10):
+    return sh(["sudo", "wpa_cli", "-i", WPA_IFACE, *args], timeout=timeout)
+
+
+def wifi_prepare():
+    """Make the radio usable before touching it.
+
+    A freshly flashed image has the radio rfkill blocked, the interface down,
+    and no supplicant running. The installer runs before anyone can log in, so
+    it cannot assume someone else has fixed that.
+    """
+    for d in sorted(Path("/sys/class/rfkill").glob("rfkill*")):
+        try:
+            if (d / "type").read_text().strip() == "wlan":
+                sh(["sudo", "sh", "-c", "echo 0 > %s/soft" % d], timeout=5)
+        except Exception:
+            pass
+    if not WPA_IFACE_CONF.exists() and WPA_CONF.exists():
+        sh(["sudo", "cp", str(WPA_CONF), str(WPA_IFACE_CONF)], timeout=10)
+    sh(["sudo", "ip", "link", "set", WPA_IFACE, "up"], timeout=10)
+    _, out = sh(["systemctl", "is-active", "wpa_supplicant@%s.service" % WPA_IFACE], timeout=10)
+    if out.strip() != "active":
+        sh(["sudo", "systemctl", "start", "wpa_supplicant@%s.service" % WPA_IFACE], timeout=25)
+        time.sleep(1.5)
+
+
 def scan_wifi():
-    ok, out = sh(["sudo", "iwlist", "wlan0", "scan"], timeout=25)
+    wifi_prepare()
+    _wpa("scan", timeout=15)
+    time.sleep(2.5)
+    ok, out = _wpa("scan_results", timeout=15)
     if not ok:
         return []
-    seen = []
-    for m in re.finditer(r'ESSID:"([^"]*)"', out):
-        ssid = m.group(1).strip()
-        if ssid and ssid not in seen:
-            seen.append(ssid)
-    return seen[:24]
+    best = {}
+    for line in out.splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) < 5:
+            continue
+        ssid = parts[4].strip()
+        if not ssid:
+            continue
+        try:
+            sig = int(parts[2])
+        except ValueError:
+            sig = -100
+        if ssid not in best or sig > best[ssid]:
+            best[ssid] = sig
+    ordered = sorted(best.items(), key=lambda kv: kv[1], reverse=True)
+    return [ssid for ssid, _ in ordered][:24]
+
+
+def connect_wifi(ssid, psk):
+    """Join a network through wpa_cli. Returns (ok, message).
+
+    No wpa_passphrase, so no plaintext password comment lands in the config,
+    and no duplicate network block is appended on every attempt.
+    """
+    ok, out = _wpa("add_network")
+    nid = out.strip().splitlines()[-1].strip() if (ok and out.strip()) else ""
+    if not nid.isdigit():
+        return False, "Could not create a network entry."
+    set_ok, _ = _wpa("set_network", nid, "ssid", '"%s"' % ssid)
+    if psk:
+        key_ok, _ = _wpa("set_network", nid, "psk", '"%s"' % psk)
+    else:
+        key_ok, _ = _wpa("set_network", nid, "key_mgmt", "NONE")
+    if not (set_ok and key_ok):
+        _wpa("remove_network", nid)
+        return False, "wpa_supplicant rejected that network."
+    _wpa("select_network", nid, timeout=15)
+    _wpa("save_config")
+    return True, ""
 
 
 def step_wifi(ui, step, total):
@@ -215,26 +282,11 @@ def step_wifi(ui, step, total):
     psk = ui.text(step, total, "Wi-Fi password", ssid, secret=True)
     if psk is None:
         return
-    ok, out = sh(["wpa_passphrase", ssid, psk])
-    if not ok:
-        ui.message(step, total, "Wi-Fi", ["Could not build the config.", out.strip()[:60]])
-        return
-    block = "\n".join(l for l in out.splitlines() if not l.strip().startswith("#psk="))
-    try:
-        # tee -a because this file is root owned and we are not.
-        p = subprocess.run(
-            ["sudo", "tee", "-a", str(WPA_CONF)],
-            input="\n" + block + "\n",
-            capture_output=True, text=True, timeout=10,
-        )
-        wrote = p.returncode == 0
-    except Exception:
-        wrote = False
-    if wrote:
-        sh(["sudo", "systemctl", "restart", "wpa_supplicant"], timeout=25)
-        ui.message(step, total, "Wi-Fi", [f"Saved {ssid}.", "It will connect in a moment."])
+    ok, msg = connect_wifi(ssid, psk)
+    if ok:
+        ui.message(step, total, "Wi-Fi", ["Saved %s." % ssid, "It will connect in a moment."])
     else:
-        ui.message(step, total, "Wi-Fi", ["Could not write the config."])
+        ui.message(step, total, "Wi-Fi", ["Could not join that network.", msg])
 
 
 def step_clock(ui, step, total):

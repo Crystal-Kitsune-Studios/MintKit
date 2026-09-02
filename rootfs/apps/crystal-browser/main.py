@@ -51,13 +51,13 @@ def strip_html(raw):
     return re.sub(r'\n{3,}', '\n\n', raw).strip()
 
 def fetch(url):
-    if not url.startswith("http"): url = "https://" + url
+    if not url.startswith(("http://", "https://")): url = "https://" + url
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": "CrystalBrowser/1.0 PocketMint",
             "Accept-Encoding": "identity",
         })
-        with urllib.request.urlopen(req, timeout=8) as r:
+        with urllib.request.urlopen(req, timeout=5) as r:
             cs = r.headers.get_content_charset() or "utf-8"
             return r.url, strip_html(r.read().decode(cs, errors="replace")), None
     except Exception as e:
@@ -99,7 +99,7 @@ class CrystalBrowser:
         if self.url: self.history.append((self.url, self.lines[:], self.scroll))
         self.fwd.clear(); self.url = url; self.status = f"Loading {url}..."
         self.lines = ["Loading..."]; self.scroll = 0
-        actual, text, err = fetch(url); self.url = actual
+        self.draw(); actual, text, err = fetch(url); self.url = actual
         if err: self.lines = [f"Error: {err}"]; self.status = "Error"
         else:
             self.lines = wrap(text, self.fonts["xs"], SCREEN_W - 24)
