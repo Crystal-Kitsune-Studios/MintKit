@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # rootfs/launcher/updater.py  --  MintKit OTA launcher updater
-import os, sys, json, urllib.request, hashlib, shutil, threading
+import os, sys, json, urllib.request, shutil, threading
 from pathlib import Path
 
 GITHUB_API      = "https://api.github.com/repos/Crystal-Kitsune-Studios/MintKit/releases/latest"
@@ -9,7 +9,17 @@ LAUNCHER_DIR    = Path(__file__).parent
 VERSION_FILE    = Path(os.environ.get("HOME", ".")) / ".mintkit" / "version.txt"
 PENDING_FILE    = Path(os.environ.get("HOME", ".")) / ".mintkit" / "pending_update.json"
 
-LAUNCHER_FILES = ["mintos.py", "updater.py", "inputbridge.py", "screenshot.py", "parental.py", "settings.py", "themes.py", "battery.py", "splash.py", "sleep_timer.py", "screensaver.py", "mintcalc.py", "pisugar.py", "achievements.py", "desktop.py", "friends_ui.py", "mintshell.py", "overlay.py", "savestates.py", "scores.py", "sideload.py", "themes_ui.py", "mintfb.py", "sitecustomize.py"]
+# Fallback list, used only when the server has no manifest.json yet.
+LAUNCHER_FILES = ["mintos.py", "updater.py", "inputbridge.py", "screenshot.py", "parental.py", "settings.py", "themes.py", "battery.py", "splash.py", "sleep_timer.py", "screensaver.py", "mintcalc.py", "pisugar.py", "achievements.py", "desktop.py", "friends_ui.py", "mintshell.py", "overlay.py", "savestates.py", "scores.py", "sideload.py", "themes_ui.py", "mintfb.py", "sitecustomize.py", "mintsetup.py"]
+
+# The manifest is what makes the file list server driven. Without it, adding a
+# filename to LAUNCHER_FILES only takes effect one release late, because
+# apply_update iterates the list held by the updater.py that is already running.
+MANIFEST_URL = f"{LAUNCHER_BASE}/manifest.json"
+VERSION_URL  = f"{LAUNCHER_BASE}/version.txt"
+APPS_BASE    = "https://pocketmint.crystal-kitsune-studios.com/apps"
+APPS_DIR     = Path("/home/mintkit/games")
+
 
 def get_local_version():
     if VERSION_FILE.exists():
@@ -19,16 +29,36 @@ def get_local_version():
     try:
         import re
         src = (LAUNCHER_DIR / "mintos.py").read_text()
-        m   = re.search(r'VERSION\s*=\s*"MintKit\s+([\d.]+)', src)
+        m   = re.search(r'VERSION\s*=\s*["\']MintKit\s+([\d.]+)', src)
         if m:
             return m.group(1)
     except Exception:
         pass
     return "0.0.0"
 
+
 def parse_version(v):
     try: return tuple(int(x) for x in v.strip().split("."))
     except Exception: return (0, 0, 0)
+
+
+def fetch_server_version():
+    """Read version.txt straight from the OTA server.
+
+    deploy-launcher.sh writes this, so it is the truth. The GitHub release is a
+    separate manual step that has drifted before.
+    """
+    try:
+        req = urllib.request.Request(
+            VERSION_URL,
+            headers={"User-Agent": "MintKit/1.0", "Cache-Control": "no-cache"},
+        )
+        with urllib.request.urlopen(req, timeout=8) as r:
+            tag = r.read().decode("utf-8").strip()
+        return {"version": tag, "body": "", "zip_url": ""} if tag else None
+    except Exception:
+        return None
+
 
 def fetch_remote_info():
     """Check GitHub releases API for latest version."""
@@ -52,6 +82,28 @@ def fetch_remote_info():
     except Exception:
         return None
 
+
+def fetch_manifest():
+    """Ask the server what to download.
+
+    Falls back to the built-in list so a device pointed at a server with no
+    manifest.json still updates exactly the way it always did.
+    """
+    try:
+        req = urllib.request.Request(
+            MANIFEST_URL,
+            headers={"User-Agent": "MintKit/1.0", "Cache-Control": "no-cache"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            m = json.loads(r.read().decode("utf-8"))
+        launcher = [str(x) for x in (m.get("launcher") or LAUNCHER_FILES)]
+        apps     = [str(x) for x in (m.get("apps") or [])]
+        return launcher, apps
+    except Exception as e:
+        print(f"[OTA] manifest unavailable, using built-in list: {e}")
+        return list(LAUNCHER_FILES), []
+
+
 def download_file(url, dest):
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "MintKit/1.0"})
@@ -63,42 +115,119 @@ def download_file(url, dest):
         print(f"[OTA] Download failed {url}: {e}")
         return False
 
+
+def prune_backups(keep_names):
+    """Drop .bak files for launcher files that are no longer part of the set."""
+    removed = 0
+    for bak in LAUNCHER_DIR.glob("*.bak"):
+        if bak.name[:-4] not in keep_names:
+            try:
+                bak.unlink()
+                removed += 1
+            except Exception:
+                pass
+    if removed:
+        print(f"[OTA] pruned {removed} orphaned .bak file(s)")
+
+
+def apply_app_update(app_files):
+    """Update /home/mintkit/games/<app>/main.py from the manifest.
+
+    Never fatal. A broken app must not be able to block a launcher update.
+    Returns the list of files that failed.
+    """
+    failed = []
+    if not app_files or not APPS_DIR.exists():
+        return failed
+    for rel in app_files:
+        dest = APPS_DIR / rel
+        tmp  = Path(str(dest) + ".ota")
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"[OTA] cannot create {dest.parent}: {e}")
+            failed.append(rel)
+            continue
+        if download_file(f"{APPS_BASE}/{rel}", tmp):
+            try:
+                shutil.move(str(tmp), str(dest))
+            except Exception as e:
+                print(f"[OTA] could not install {rel}: {e}")
+                failed.append(rel)
+        else:
+            failed.append(rel)
+    return failed
+
+
 def apply_update(remote_info, on_done=None):
     version = remote_info.get("version", "?")
+    launcher_files, app_files = fetch_manifest()
+
     tmp_dir = LAUNCHER_DIR / "_ota_tmp"
-    tmp_dir.mkdir(exist_ok=True)
-    ok = True
-    for fname in LAUNCHER_FILES:
-        url  = f"{LAUNCHER_BASE}/{fname}"
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download everything before touching anything, and do not stop at the
+    # first failure: we want the full list of what went wrong.
+    failed = []
+    for fname in launcher_files:
         dest = tmp_dir / fname
-        if not download_file(url, dest):
-            ok = False; break
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if not download_file(f"{LAUNCHER_BASE}/{fname}", dest):
+            failed.append(fname)
+
+    ok = not failed
     if ok:
-        for fname in LAUNCHER_FILES:
-            src  = tmp_dir / fname
-            dst  = LAUNCHER_DIR / fname
-            bak  = LAUNCHER_DIR / f"{fname}.bak"
-            if dst.exists(): shutil.copy2(dst, bak)
+        for fname in launcher_files:
+            src = tmp_dir / fname
+            dst = LAUNCHER_DIR / fname
+            bak = LAUNCHER_DIR / f"{fname}.bak"
+            try:
+                new_bytes = src.read_bytes()
+            except Exception as e:
+                print(f"[OTA] staged file missing for {fname}: {e}")
+                failed.append(fname)
+                ok = False
+                break
+            if dst.exists():
+                # Only keep a backup when the file actually changed. This is
+                # what stops ~30 identical .bak files piling up every run.
+                if dst.read_bytes() == new_bytes:
+                    src.unlink()
+                    continue
+                shutil.copy2(dst, bak)
             shutil.move(str(src), str(dst))
+
+    if ok:
         VERSION_FILE.parent.mkdir(parents=True, exist_ok=True)
         VERSION_FILE.write_text(version)
+        prune_backups(set(launcher_files))
+        app_failed = apply_app_update(app_files)
+        if app_failed:
+            print(f"[OTA] {len(app_failed)} app file(s) failed: {', '.join(app_failed)}")
+        print(f"[OTA] updated to {version} ({len(launcher_files)} launcher files checked)")
+    else:
+        print(f"[OTA] ABORTED at {version}, {len(failed)} file(s) failed: {', '.join(failed)}")
+
     shutil.rmtree(tmp_dir, ignore_errors=True)
     if on_done:
-        on_done(ok, version)
+        on_done(ok, version, failed)
+
 
 def check_for_update():
-    """Compare local version to latest GitHub release. Returns remote info dict or None."""
-    remote = fetch_remote_info()
+    """Compare local version to the newest available. Returns info dict or None."""
+    remote = fetch_server_version() or fetch_remote_info()
     if not remote: return None
     local    = parse_version(get_local_version())
     remote_v = parse_version(remote.get("version", "0.0.0"))
     if remote_v > local:
         return remote
-    # No update — clear any stale pending file
+    # No update, so clear any stale pending file
     if PENDING_FILE.exists():
         try: PENDING_FILE.unlink()
         except Exception: pass
     return None
+
 
 class OtaManager:
     def __init__(self):
@@ -106,6 +235,7 @@ class OtaManager:
         self.remote_info      = None
         self.applying         = False
         self.apply_result     = None
+        self.failed_files     = []
         self._thread          = None
 
     def start_check(self):
@@ -124,7 +254,7 @@ class OtaManager:
                     return
             except Exception:
                 pass
-        # Fall back to a live GitHub check
+        # Fall back to a live check
         info = check_for_update()
         if info:
             self.remote_info      = info
@@ -141,8 +271,9 @@ class OtaManager:
         )
         t.start()
 
-    def _on_apply_done(self, success, version):
+    def _on_apply_done(self, success, version, failed=()):
         self.apply_result = (success, version)
+        self.failed_files = list(failed)
         self.applying     = False
 
     def restart_launcher(self):

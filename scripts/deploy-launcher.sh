@@ -21,7 +21,7 @@ SRC="${LAUNCHER_SRC:-$ROOT/rootfs/launcher}"
 WWW="${LAUNCHER_WWW:-/var/www/pocketmint/launcher}"
 
 # Keep this list in sync with LAUNCHER_FILES in updater.py.
-FILES=(mintos.py updater.py screenshot.py parental.py settings.py themes.py inputbridge.py battery.py splash.py sleep_timer.py screensaver.py mintcalc.py pisugar.py achievements.py desktop.py friends_ui.py mintshell.py overlay.py savestates.py scores.py sideload.py themes_ui.py mintfb.py sitecustomize.py)
+FILES=(mintos.py updater.py screenshot.py parental.py settings.py themes.py inputbridge.py battery.py splash.py sleep_timer.py screensaver.py mintcalc.py pisugar.py achievements.py desktop.py friends_ui.py mintshell.py overlay.py savestates.py scores.py sideload.py themes_ui.py mintfb.py sitecustomize.py mintsetup.py)
 echo "==> Publishing launcher v$VERSION from $SRC"
 
 # 1. Every file must exist and compile. Serving a launcher with a SyntaxError
@@ -55,6 +55,43 @@ for f in "${FILES[@]}"; do
 done
 
 echo "$VERSION" > "$WWW/version.txt"
+
+# 4. Publish the app files. Nothing in this repo ever wrote to /apps before,
+#    which is why a stale app on a device could never heal itself.
+APPWWW="${APPS_WWW:-/var/www/pocketmint/apps}"
+APP_NAMES=()
+for d in "$ROOT"/rootfs/apps/*/; do
+  name=$(basename "$d")
+  [ -f "$d/main.py" ] || continue
+  if ! python3 -m py_compile "$d/main.py"; then
+    echo "ERROR: apps/$name/main.py does not compile, refusing to publish" >&2
+    exit 1
+  fi
+  mkdir -p "$APPWWW/$name"
+  cp "$d/main.py" "$APPWWW/$name/main.py.incoming"
+  mv "$APPWWW/$name/main.py.incoming" "$APPWWW/$name/main.py"
+  APP_NAMES+=("$name")
+  echo "    published apps/$name/main.py"
+done
+
+# 5. Publish the manifest. This is what frees devices from their baked in list.
+{
+  printf '{\n  "version": "%s",\n  "launcher": [' "$VERSION"
+  sep=""
+  for f in "${FILES[@]}"; do
+    printf '%s"%s"' "$sep" "$f"
+    sep=", "
+  done
+  printf '],\n  "apps": ['
+  sep=""
+  for name in "${APP_NAMES[@]}"; do
+    printf '%s"%s/main.py"' "$sep" "$name"
+    sep=", "
+  done
+  printf ']\n}\n'
+} > "$WWW/manifest.json.incoming"
+mv "$WWW/manifest.json.incoming" "$WWW/manifest.json"
+echo "    published manifest.json"
 sync
 
 echo "✅  Launcher v$VERSION published to $WWW"

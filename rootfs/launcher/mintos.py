@@ -34,7 +34,7 @@ if IS_LINUX:
 
 # ── OS built-in imports ────────────────────────────────────────────────────
 from launcher.splash  import show   as show_splash
-from launcher.sleep   import SleepTimer
+from launcher.sleep_timer import SleepTimer
 from launcher.battery import draw_bar as draw_battery
 from launcher         import desktop
 from launcher         import overlay
@@ -66,7 +66,13 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION = 'MintKit 2.2.1 "Spearmint"'
+VERSION = 'MintKit 3.0.0 "Peppermint"'
+
+# --- First boot setup gate ---
+SETUP_FLAG   = Path("/home/mintkit/.setup-complete")
+SETUP_SCRIPT = Path("/home/mintkit/launcher/mintsetup.py")
+if IS_LINUX and SETUP_SCRIPT.exists() and not SETUP_FLAG.exists():
+    subprocess.run([sys.executable, str(SETUP_SCRIPT)])
 STORE_URL = "crystal-kitsune-studios.com"
 
 # ── Device ID (stable across reboots) ────────────────────────────────────
