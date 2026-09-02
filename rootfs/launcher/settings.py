@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # rootfs/launcher/settings.py -- System Settings (OS built-in)
-import os, sys, platform, json, subprocess
+import os, sys, time, platform, json, subprocess
 from pathlib import Path
 from . import themes as th   # same package
 
@@ -44,38 +44,63 @@ def set_val(key, val):
 TABS = ["THEME", "WIFI", "DISPLAY", "SOUND", "SYSTEM"]
 
 # ── Wi-Fi helpers ─────────────────────────────────────────────────────────
+WPA_IFACE = "wlan0"
+
+def _wpa(*args, timeout=8):
+    return subprocess.check_output(
+        ["sudo", "wpa_cli", "-i", WPA_IFACE, *args],
+        stderr=subprocess.STDOUT, timeout=timeout, text=True)
+
+def current_ssid():
+    try:
+        for line in _wpa("status").splitlines():
+            if line.startswith("ssid="):
+                return line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return None
+
 def scan_wifi():
     try:
-        out = subprocess.check_output(
-            ["sudo", "iwlist", "wlan0", "scan"],
-            stderr=subprocess.DEVNULL, timeout=8, text=True)
-        nets = []
-        ssid = sig = None
-        for line in out.splitlines():
-            l = line.strip()
-            if "ESSID:" in l:
-                ssid = l.split('"')[1] if '"' in l else ""
-            if "Signal level" in l:
-                try: sig = int(l.split("Signal level=")[1].split(" ")[0].split("/")[0])
-                except Exception: sig = -80
-            if ssid is not None and sig is not None:
-                nets.append({"ssid": ssid, "signal": sig, "connected": False})
-                ssid = sig = None
-        try:
-            cur = subprocess.check_output(["iwgetid", "-r"], text=True).strip()
-            for n in nets:
-                if n["ssid"] == cur: n["connected"] = True
-        except Exception: pass
-        return sorted(nets, key=lambda x: -x["signal"]), f"{len(nets)} networks found"
+        _wpa("scan")
     except Exception as e:
         return [], f"Scan failed: {e}"
+    time.sleep(2.5)
+    try:
+        out = _wpa("scan_results")
+    except Exception as e:
+        return [], f"Scan failed: {e}"
+    cur  = current_ssid()
+    seen = {}
+    for line in out.splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) < 5:
+            continue
+        ssid = parts[4].strip()
+        if not ssid:
+            continue
+        try:
+            sig = int(parts[2])
+        except ValueError:
+            sig = -90
+        if ssid not in seen or sig > seen[ssid]["signal"]:
+            seen[ssid] = {"ssid": ssid, "signal": sig, "connected": ssid == cur}
+    nets = sorted(seen.values(), key=lambda x: -x["signal"])
+    if not nets:
+        return [], "No networks found"
+    return nets, f"{len(nets)} networks found"
 
 def connect_wifi(ssid, password):
     try:
-        cmd = f'wpa_passphrase "{ssid}" "{password}" | sudo tee -a /etc/wpa_supplicant/wpa_supplicant.conf'
-        subprocess.run(cmd, shell=True, check=True)
-        subprocess.run(["sudo", "wpa_cli", "-i", "wlan0", "reconfigure"], check=True)
-        return f"Connected to {ssid}"
+        nid = _wpa("add_network").strip().splitlines()[-1].strip()
+        _wpa("set_network", nid, "ssid", f'"{ssid}"')
+        if password:
+            _wpa("set_network", nid, "psk", f'"{password}"')
+        else:
+            _wpa("set_network", nid, "key_mgmt", "NONE")
+        _wpa("enable_network", nid)
+        _wpa("save_config")
+        return f"Connecting to {ssid}..."
     except Exception as e:
         return f"Failed: {e}"
 
@@ -173,6 +198,8 @@ def toggle_dev_mode(screen, clock, font):
 # ── Main entry point ──────────────────────────────────────────────────────
 def run(screen, clock):
     """Called by the launcher. Runs settings UI on the shared screen."""
+    global SCREEN_W, SCREEN_H
+    SCREEN_W, SCREEN_H = screen.get_size()
     font_lg = pygame.font.SysFont("monospace", 14, bold=True)
     font_sm = pygame.font.SysFont("monospace", 11)
     font_xs = pygame.font.SysFont("monospace", 10)
@@ -295,7 +322,7 @@ def run(screen, clock):
                             wifi_cur = max(0, wifi_cur-1)
                         elif event.key in (pygame.K_DOWN, pygame.K_s):
                             wifi_cur = min(len(wifi_networks)-1, wifi_cur+1)
-                        elif event.key in (pygame.K_z, pygame.K_RETURN):
+                        elif event.key == pygame.K_z:
                             wifi_networks[:], wifi_status = scan_wifi()
                         elif event.key == pygame.K_RETURN and wifi_networks:
                             wifi_input_mode = True

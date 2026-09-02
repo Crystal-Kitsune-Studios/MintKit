@@ -1,3 +1,10 @@
+# v3.0.0 (2 September 2026)
+
+- MintKit 3.0.0 Peppermint: manifest driven OTA, first boot installer, mintfb input bridge fix
+- Fix child app framebuffer handoff
+- Fix child app framebuffer handoff
+- Fix child app framebuffer handoff
+
 ## [3.0.0] - 2026-09-01 "Peppermint"
 
 First release on the Peppermint line. The 2.x Spearmint series is closed.
