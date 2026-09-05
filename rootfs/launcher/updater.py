@@ -16,6 +16,10 @@ LAUNCHER_FILES = ["mintos.py", "updater.py", "inputbridge.py", "screenshot.py", 
 # filename to LAUNCHER_FILES only takes effect one release late, because
 # apply_update iterates the list held by the updater.py that is already running.
 MANIFEST_URL = f"{LAUNCHER_BASE}/manifest.json"
+
+# Large non-.py files served from LAUNCHER_BASE/assets/. Fetched only when
+# missing, so adding one here costs nothing on devices that already have it.
+LAUNCHER_ASSETS = ["setup.ogg"]
 VERSION_URL  = f"{LAUNCHER_BASE}/version.txt"
 APPS_BASE    = "https://pocketmint.crystal-kitsune-studios.com/apps"
 APPS_DIR     = Path("/home/mintkit/games")
@@ -159,6 +163,36 @@ def apply_app_update(app_files):
     return failed
 
 
+def fetch_missing_assets():
+    """Fetch launcher assets that are absent locally.
+
+    Assets are large and do not change between releases, so re-downloading
+    them on every update would make each OTA look hung on a Pi Zero. A
+    failure here must never fail an update: the music is cosmetic.
+    """
+    adir = LAUNCHER_DIR / "assets"
+    for name in LAUNCHER_ASSETS:
+        dest = adir / name
+        if dest.exists() and dest.stat().st_size > 0:
+            continue
+        adir.mkdir(parents=True, exist_ok=True)
+        tmp = adir / (name + ".incoming")
+        try:
+            req = urllib.request.Request(
+                f"{LAUNCHER_BASE}/assets/{name}",
+                headers={"User-Agent": "MintKit/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as r, open(tmp, "wb") as fh:
+                shutil.copyfileobj(r, fh, 65536)
+            tmp.replace(dest)
+            print(f"[OTA] fetched asset {name}")
+        except Exception as e:
+            print(f"[OTA] asset {name} unavailable: {e}")
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
 def apply_update(remote_info, on_done=None):
     version = remote_info.get("version", "?")
     launcher_files, app_files = fetch_manifest()
@@ -175,6 +209,8 @@ def apply_update(remote_info, on_done=None):
         dest.parent.mkdir(parents=True, exist_ok=True)
         if not download_file(f"{LAUNCHER_BASE}/{fname}", dest):
             failed.append(fname)
+
+    fetch_missing_assets()
 
     ok = not failed
     if ok:

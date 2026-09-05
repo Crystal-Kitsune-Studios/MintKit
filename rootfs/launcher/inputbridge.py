@@ -247,7 +247,7 @@ class _Bridge:
                 self.mods &= ~bit
 
         # value 1 = press, 2 = autorepeat, 0 = release
-        if value in (1, 2):
+        if value == 1:
             etype_pg = pygame.KEYDOWN
         elif value == 0:
             etype_pg = pygame.KEYUP
@@ -257,7 +257,6 @@ class _Bridge:
         if self.verbose:
             print("inputbridge: code=%d -> key=%d %s"
                   % (code, key, "down" if etype_pg == pygame.KEYDOWN else "up"))
-            return
 
         if not pygame.get_init():
             return

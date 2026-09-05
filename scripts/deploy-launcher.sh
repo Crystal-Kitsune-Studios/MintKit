@@ -54,6 +54,19 @@ for f in "${FILES[@]}"; do
   echo "    published $f"
 done
 
+# 4b. Publish launcher assets. Not .py, so they are not in FILES.
+ASSETS_SRC="$SRC/assets"
+if [ -d "$ASSETS_SRC" ]; then
+  mkdir -p "$WWW/assets"
+  for a in "$ASSETS_SRC"/*; do
+    [ -f "$a" ] || continue
+    n="$(basename "$a")"
+    cp "$a" "$WWW/assets/$n.incoming"
+    mv "$WWW/assets/$n.incoming" "$WWW/assets/$n"
+    echo "    published assets/$n"
+  done
+fi
+
 echo "$VERSION" > "$WWW/version.txt"
 
 # 4. Publish the app files. Nothing in this repo ever wrote to /apps before,
