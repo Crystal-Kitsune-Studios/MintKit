@@ -80,7 +80,12 @@ class Screen:
         """Handle a subset of CSI sequences."""
         cmd = seq[-1]
         params_str = seq[1:-1]  # strip leading '[' and trailing command
-        params = [int(x) if x else 0 for x in params_str.split(';')] if params_str else [0]
+        if params_str[:1] in ("?", ">", "<", "="):
+            return  # private DEC modes such as bracketed paste. Not ours to interpret.
+        try:
+            params = [int(x) if x else 0 for x in params_str.split(';')] if params_str else [0]
+        except ValueError:
+            return  # one odd escape must never kill the reader thread
 
         if cmd == 'H' or cmd == 'f':   # cursor position
             self.cy = max(0, min(self.rows - 1, (params[0] or 1) - 1))
@@ -181,7 +186,8 @@ _SPECIAL = {
     pygame.K_PAGEUP:    b'\x1b[5~',
     pygame.K_PAGEDOWN:  b'\x1b[6~',
     pygame.K_TAB:       b'\t',
-    pygame.K_ESCAPE:    None,   # handled by caller to exit
+    pygame.K_ESCAPE:    b'\x1b',  # passes through: nano and vim need it
+    pygame.K_F10:       None,      # handled by caller to exit
     pygame.K_F1:        b'\x1bOP',
     pygame.K_F2:        b'\x1bOQ',
     pygame.K_F3:        b'\x1bOR',
@@ -196,6 +202,9 @@ def key_to_bytes(event) -> bytes | None:
     if event.key in _SPECIAL:
         return _SPECIAL[event.key]  # None signals exit
 
+    if ctrl and event.key == pygame.K_q:
+        return None  # Ctrl+Q exits MintShell
+
     if ctrl and pygame.K_a <= event.key <= pygame.K_z:
         return bytes([event.key - pygame.K_a + 1])  # Ctrl+A = 0x01, etc.
 
@@ -206,10 +215,49 @@ def key_to_bytes(event) -> bytes | None:
 
 
 # ── Main entry point ────────────────────────────────────────────────────────────────
+# pygame's SysFont enumerates system fonts by shelling out to fc-list, and
+# fontconfig is not installed on PocketMint. So SysFont finds nothing and
+# silently falls back to a proportional font, which makes char_w meaningless
+# and walks the cursor away from the text. Load a real mono TTF by path.
+_MONO_REGULAR = (
+    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+)
+_MONO_BOLD = (
+    "/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+)
+_FONT_CACHE = {}
+
+
+def _mono(size, bold=False):
+    """A monospace font, loaded by path and cached.
+
+    Cached because the header title was building a new font object every
+    frame, which is not free on a Pi Zero.
+    """
+    key = (size, bold)
+    if key in _FONT_CACHE:
+        return _FONT_CACHE[key]
+    f = None
+    for path in (_MONO_BOLD if bold else _MONO_REGULAR):
+        if os.path.exists(path):
+            f = pygame.font.Font(path, size)
+            break
+    if f is None:
+        f = pygame.font.SysFont(FONT_NAME, size, bold=bold)
+    _FONT_CACHE[key] = f
+    return f
+
 def run(screen, clock):
     """Called by the launcher. Runs MintShell on the shared SDL screen."""
-    font    = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
-    char_w  = font.size('M')[0]
+    global SCREEN_W, SCREEN_H
+    SCREEN_W, SCREEN_H = screen.get_size()
+    font    = _mono(FONT_SIZE)
+    # advance width, not ink width. font.size() includes side bearing, which
+    # put the cursor grid one pixel per column ahead of the rendered text.
+    _adv = font.metrics("M")
+    char_w = _adv[0][4] if (_adv and _adv[0]) else font.size("M" * 40)[0] // 40
     char_h  = font.get_linesize()
 
     # Fit as many cols/rows as possible inside the content area
@@ -247,7 +295,7 @@ def run(screen, clock):
                 running = False
             elif event.type == pygame.KEYDOWN:
                 b = key_to_bytes(event)
-                if b is None:        # Escape → exit MintShell
+                if b is None:        # Ctrl+Q or F10 → exit MintShell
                     running = False
                 elif b:
                     proc.write(b)
@@ -261,12 +309,12 @@ def run(screen, clock):
         pygame.draw.rect(screen, p['bar'], (0, 0, SCREEN_W, HEADER))
         pygame.draw.line(screen, p['border'], (0, HEADER), (SCREEN_W, HEADER))
         icon = font.render('\U0001f5a5', True, p['accent'])   # 🖥
-        title = pygame.font.SysFont(FONT_NAME, FONT_SIZE, bold=True).render(
+        title = _mono(FONT_SIZE, bold=True).render(
             'MintShell', True, p['accent'])
         screen.blit(icon,  (PAD, (HEADER - icon.get_height())  // 2))
         screen.blit(title, (PAD + icon.get_width() + 4,
                              (HEADER - title.get_height()) // 2))
-        hint = font.render('Esc → back', True, p['dim'])
+        hint = font.render('Ctrl+Q → back', True, p['dim'])
         screen.blit(hint, (SCREEN_W - hint.get_width() - PAD,
                             (HEADER - hint.get_height()) // 2))
 
@@ -296,7 +344,7 @@ def run(screen, clock):
 
         # Dead shell notice
         if not proc.alive:
-            msg = font.render('[shell exited — press Esc]', True, p['dim'])
+            msg = font.render('[shell exited — press Ctrl+Q]', True, p['dim'])
             screen.blit(msg, (PAD, SCREEN_H - PAD - char_h))
 
         pygame.display.flip()

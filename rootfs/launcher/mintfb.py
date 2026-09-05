@@ -77,6 +77,8 @@ if sys.platform == "linux":
 # Standalone apps also need MintKit's evdev-to-pygame input bridge.
 try:
     from inputbridge import start as _start_input_bridge
-    _start_input_bridge()
+    import os
+    if os.environ.get("MINTKIT_CHILD_APP") == "1":
+        _start_input_bridge()
 except Exception as _exc:
     print(f"[mintfb] input bridge failed: {_exc}", file=sys.stderr)

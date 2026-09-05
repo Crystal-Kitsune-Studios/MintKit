@@ -55,7 +55,7 @@ for d in (DATA_DIR, GAMES_DIR, MEDIA_DIR):
 FRIENDS_FILE = DATA_DIR / "friends.json"
 CATALOG_FILE = DATA_DIR / "catalog.json"
 
-VERSION = 'MintKit 3.1.1 "Peppermint"'
+VERSION = 'MintKit 3.1.2 "Peppermint"'
 
 # --- First boot setup gate ---
 SETUP_FLAG   = Path("/home/mintkit/.setup-complete")
